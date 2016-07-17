@@ -12,6 +12,12 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 )
 
+type contextKey int
+
+const (
+	keyTracer contextKey = iota
+)
+
 // Transport wraps a RoundTripper. If a request is being traced with
 // HTTPTracer, Transport will inject the current span into the headers,
 // set HTTP related tags on the span as well as finish the span after
@@ -41,7 +47,7 @@ type Transport struct {
 func TraceRequest(sp opentracing.Span, req *http.Request) (*http.Request, *HTTPTracer) {
 	ht := newHTTPTrace(sp)
 	ctx := httptrace.WithClientTrace(req.Context(), ht.clientTrace())
-	req = req.WithContext(context.WithValue(ctx, "tracer", ht))
+	req = req.WithContext(context.WithValue(ctx, keyTracer, ht))
 	return req, ht
 }
 
@@ -59,7 +65,7 @@ func (c closeTracker) Close() error {
 
 // RoundTrip implements the RoundTripper interface.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	tracer, ok := req.Context().Value("tracer").(*HTTPTracer)
+	tracer, ok := req.Context().Value(keyTracer).(*HTTPTracer)
 	if !ok {
 		return t.RoundTripper.RoundTrip(req)
 	}
