@@ -70,7 +70,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return t.RoundTripper.RoundTrip(req)
 	}
 
-	tracer.start()
+	tracer.start(req)
 
 	ext.HTTPMethod.Set(tracer.sp, req.Method)
 	ext.HTTPUrl.Set(tracer.sp, req.URL.String())
@@ -94,12 +94,12 @@ type HTTPTracer struct {
 	sp     opentracing.Span
 }
 
-func (h *HTTPTracer) start() opentracing.Span {
+func (h *HTTPTracer) start(req *http.Request) opentracing.Span {
 	var ctx opentracing.SpanContext
 	if h.parent != nil {
 		ctx = h.parent.Context()
 	}
-	h.sp = h.parent.Tracer().StartSpan("HTTP", opentracing.ChildOf(ctx))
+	h.sp = h.parent.Tracer().StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
 	h.parent = h.sp
 	ext.SpanKindRPCClient.Set(h.sp)
 	ext.Component.Set(h.sp, "net/http")

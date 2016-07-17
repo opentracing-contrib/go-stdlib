@@ -27,7 +27,7 @@ func (w *statusCodeTracker) WriteHeader(status int) {
 func Middleware(tr opentracing.Tracer, h http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		ctx, _ := tr.Extract(opentracing.TextMap, opentracing.HTTPHeaderTextMapCarrier(r.Header))
-		sp := tr.StartSpan(r.URL.String(), ext.RPCServerOption(ctx))
+		sp := tr.StartSpan("HTTP "+r.Method, ext.RPCServerOption(ctx))
 		ext.HTTPMethod.Set(sp, r.Method)
 		ext.HTTPUrl.Set(sp, r.URL.String())
 		ext.Component.Set(sp, "net/http")
