@@ -44,8 +44,8 @@ type Transport struct {
 // 	}
 // 	res.Body.Close()
 // 	ht.Finish()
-func TraceRequest(sp opentracing.Span, req *http.Request) (*http.Request, *Tracer) {
-	ht := newTrace(sp)
+func TraceRequest(parent opentracing.Span, req *http.Request) (*http.Request, *Tracer) {
+	ht := newTrace(parent)
 	ctx := httptrace.WithClientTrace(req.Context(), ht.clientTrace())
 	req = req.WithContext(context.WithValue(ctx, keyTracer, ht))
 	return req, ht
