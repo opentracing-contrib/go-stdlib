@@ -79,13 +79,17 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.TextMap, carrier)
 	resp, err := t.RoundTripper.RoundTrip(req)
 
+	if err != nil {
+		tracer.sp.Finish()
+		return resp, err
+	}
 	ext.HTTPStatusCode.Set(tracer.sp, uint16(resp.StatusCode))
-	if err != nil && req.Method == "HEAD" {
+	if req.Method == "HEAD" {
 		tracer.sp.Finish()
 	} else {
 		resp.Body = closeTracker{resp.Body, tracer.sp}
 	}
-	return resp, err
+	return resp, nil
 }
 
 type Tracer struct {
