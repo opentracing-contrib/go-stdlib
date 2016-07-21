@@ -184,7 +184,7 @@ func (h *Tracer) connectStart(network, addr string) {
 }
 
 func (h *Tracer) connectDone(network, addr string, err error) {
-	h.sp.LogEventWithPayload("Connect start", network+":"+addr)
+	h.sp.LogEventWithPayload("Connect done", network+":"+addr)
 }
 
 func (h *Tracer) wroteHeaders() {
