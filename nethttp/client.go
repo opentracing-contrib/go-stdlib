@@ -75,8 +75,8 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ext.HTTPMethod.Set(tracer.sp, req.Method)
 	ext.HTTPUrl.Set(tracer.sp, req.URL.String())
 
-	carrier := opentracing.HTTPHeaderTextMapCarrier(req.Header)
-	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.TextMap, carrier)
+	carrier := opentracing.HTTPHeadersCarrier(req.Header)
+	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
 	resp, err := t.RoundTripper.RoundTrip(req)
 
 	if err != nil {
