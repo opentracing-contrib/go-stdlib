@@ -22,6 +22,8 @@ const (
 // Tracer, Transport will inject the current span into the headers,
 // and set HTTP related tags on the span.
 type Transport struct {
+	// The actual RoundTripper to use for the request. A nil
+	// RoundTripper defaults to http.DefaultTransport.
 	http.RoundTripper
 }
 
@@ -64,9 +66,13 @@ func (c closeTracker) Close() error {
 
 // RoundTrip implements the RoundTripper interface.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt := t.RoundTripper
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
 	tracer, ok := req.Context().Value(keyTracer).(*Tracer)
 	if !ok {
-		return t.RoundTripper.RoundTrip(req)
+		return rt.RoundTrip(req)
 	}
 
 	tracer.start(req)
@@ -76,7 +82,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	carrier := opentracing.HTTPHeadersCarrier(req.Header)
 	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
-	resp, err := t.RoundTripper.RoundTrip(req)
+	resp, err := rt.RoundTrip(req)
 
 	if err != nil {
 		tracer.sp.Finish()
