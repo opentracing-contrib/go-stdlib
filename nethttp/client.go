@@ -99,10 +99,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type Tracer struct {
-	tr     opentracing.Tracer
-	root   opentracing.Span
-	parent opentracing.Span
-	sp     opentracing.Span
+	tr   opentracing.Tracer
+	root opentracing.Span
+	sp   opentracing.Span
 }
 
 func (h *Tracer) start(req *http.Request) opentracing.Span {
@@ -115,15 +114,10 @@ func (h *Tracer) start(req *http.Request) opentracing.Span {
 		root := h.tr.StartSpan("HTTP", opentracing.ChildOf(spanctx))
 		ext.SpanKindRPCClient.Set(root)
 		h.root = root
-		h.parent = root
 	}
 
-	var ctx opentracing.SpanContext
-	if h.parent != nil {
-		ctx = h.parent.Context()
-	}
+	ctx := h.root.Context()
 	h.sp = h.tr.StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
-	h.parent = h.sp
 	ext.SpanKindRPCClient.Set(h.sp)
 	ext.Component.Set(h.sp, "net/http")
 
