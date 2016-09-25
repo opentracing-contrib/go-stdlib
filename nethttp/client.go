@@ -47,7 +47,7 @@ type Transport struct {
 // 	}
 // 	res.Body.Close()
 func TraceRequest(tr opentracing.Tracer, req *http.Request) *http.Request {
-	ht := &tracer{tr: tr}
+	ht := &Tracer{tr: tr}
 	ctx := httptrace.WithClientTrace(req.Context(), ht.clientTrace())
 	req = req.WithContext(context.WithValue(ctx, keyTracer, ht))
 	return req
@@ -76,7 +76,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	tracer, ok := req.Context().Value(keyTracer).(*tracer)
+	tracer, ok := req.Context().Value(keyTracer).(*Tracer)
 	if !ok {
 		return rt.RoundTrip(req)
 	}
@@ -114,14 +114,14 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-type tracer struct {
+type Tracer struct {
 	tr    opentracing.Tracer
 	root  opentracing.Span
 	first opentracing.Span
 	sp    opentracing.Span
 }
 
-func (h *tracer) start(req *http.Request) opentracing.Span {
+func (h *Tracer) start(req *http.Request) opentracing.Span {
 	if h.root == nil {
 		parent := opentracing.SpanFromContext(req.Context())
 		var spanctx opentracing.SpanContext
@@ -144,7 +144,7 @@ func (h *tracer) start(req *http.Request) opentracing.Span {
 	return h.sp
 }
 
-func (h *tracer) clientTrace() *httptrace.ClientTrace {
+func (h *Tracer) clientTrace() *httptrace.ClientTrace {
 	return &httptrace.ClientTrace{
 		GetConn:              h.getConn,
 		GotConn:              h.gotConn,
@@ -161,54 +161,54 @@ func (h *tracer) clientTrace() *httptrace.ClientTrace {
 	}
 }
 
-func (h *tracer) getConn(hostPort string) {
+func (h *Tracer) getConn(hostPort string) {
 	ext.HTTPUrl.Set(h.sp, hostPort)
 	h.sp.LogEvent("Get conn")
 }
 
-func (h *tracer) gotConn(info httptrace.GotConnInfo) {
+func (h *Tracer) gotConn(info httptrace.GotConnInfo) {
 	h.sp.SetTag("net/http.reused", info.Reused)
 	h.sp.SetTag("net/http.was_idle", info.WasIdle)
 	h.sp.LogEvent("Got conn")
 }
 
-func (h *tracer) putIdleConn(error) {
+func (h *Tracer) putIdleConn(error) {
 	h.sp.LogEvent("Put idle conn")
 }
 
-func (h *tracer) gotFirstResponseByte() {
+func (h *Tracer) gotFirstResponseByte() {
 	h.sp.LogEvent("Got first response byte")
 }
 
-func (h *tracer) got100Continue() {
+func (h *Tracer) got100Continue() {
 	h.sp.LogEvent("Got 100 continue")
 }
 
-func (h *tracer) dnsStart(info httptrace.DNSStartInfo) {
+func (h *Tracer) dnsStart(info httptrace.DNSStartInfo) {
 	h.sp.LogEventWithPayload("DNS start", info.Host)
 }
 
-func (h *tracer) dnsDone(httptrace.DNSDoneInfo) {
+func (h *Tracer) dnsDone(httptrace.DNSDoneInfo) {
 	h.sp.LogEvent("DNS done")
 }
 
-func (h *tracer) connectStart(network, addr string) {
+func (h *Tracer) connectStart(network, addr string) {
 	h.sp.LogEventWithPayload("Connect start", network+":"+addr)
 }
 
-func (h *tracer) connectDone(network, addr string, err error) {
+func (h *Tracer) connectDone(network, addr string, err error) {
 	h.sp.LogEventWithPayload("Connect done", network+":"+addr)
 }
 
-func (h *tracer) wroteHeaders() {
+func (h *Tracer) wroteHeaders() {
 	h.sp.LogEvent("Wrote headers")
 }
 
-func (h *tracer) wait100Continue() {
+func (h *Tracer) wait100Continue() {
 	h.sp.LogEvent("Wait 100 continue")
 }
 
-func (h *tracer) wroteRequest(info httptrace.WroteRequestInfo) {
+func (h *Tracer) wroteRequest(info httptrace.WroteRequestInfo) {
 	if info.Err != nil {
 		ext.Error.Set(h.sp, true)
 	}
