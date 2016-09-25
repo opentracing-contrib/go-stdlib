@@ -18,13 +18,12 @@ func makeRequest(t *testing.T, url string) []*mocktracer.MockSpan {
 		t.Fatal(err)
 	}
 	req = req.WithContext(opentracing.ContextWithSpan(req.Context(), span))
-	req, ht := TraceRequest(tr, req)
+	req = TraceRequest(tr, req)
 	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		_ = resp.Body.Close()
 	}
-	_ = resp.Body.Close()
-	ht.Finish()
+
 	span.Finish()
 
 	return tr.FinishedSpans()
@@ -46,15 +45,16 @@ func TestClientTrace(t *testing.T) {
 		url string
 		num int
 	}{
-		{"/ok", 3},
-		{"/redirect", 4},
-		{"/fail", 3},
+		{srv.URL + "/ok", 3},
+		{srv.URL + "/redirect", 4},
+		{srv.URL + "/fail", 3},
+		{"http://localhost:0", 3},
 	}
 
 	for _, tt := range tests {
-		spans := makeRequest(t, srv.URL+tt.url)
+		spans := makeRequest(t, tt.url)
 		if got, want := len(spans), tt.num; got != want {
-			t.Fatalf("got %d spans, expected %d", got, want)
+			t.Fatalf("GET %s: got %d spans, expected %d", tt.url, got, want)
 		}
 	}
 }
