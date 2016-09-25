@@ -38,15 +38,16 @@ type Transport struct {
 // 	if err != nil {
 // 		log.Fatal(err)
 // 	}
-// 	req, ht := nethttp.TraceRequest(parentSpan, req)
+// 	req = req.WithContext(opentracing.ContextWithSpan(req.Context(), parentSpan))
+// 	req, ht := nethttp.TraceRequest(tracer, req)
 // 	res, err := client.Do(req)
 // 	if err != nil {
 // 		log.Fatal(err)
 // 	}
 // 	res.Body.Close()
 // 	ht.Finish()
-func TraceRequest(parent opentracing.Span, req *http.Request) (*http.Request, *Tracer) {
-	ht := newTrace(parent)
+func TraceRequest(tr opentracing.Tracer, req *http.Request) (*http.Request, *Tracer) {
+	ht := &Tracer{tr: tr}
 	ctx := httptrace.WithClientTrace(req.Context(), ht.clientTrace())
 	req = req.WithContext(context.WithValue(ctx, keyTracer, ht))
 	return req, ht
@@ -98,17 +99,30 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type Tracer struct {
+	tr     opentracing.Tracer
 	root   opentracing.Span
 	parent opentracing.Span
 	sp     opentracing.Span
 }
 
 func (h *Tracer) start(req *http.Request) opentracing.Span {
+	if h.root == nil {
+		parent := opentracing.SpanFromContext(req.Context())
+		var spanctx opentracing.SpanContext
+		if parent != nil {
+			spanctx = parent.Context()
+		}
+		root := h.tr.StartSpan("HTTP", opentracing.ChildOf(spanctx))
+		ext.SpanKindRPCClient.Set(root)
+		h.root = root
+		h.parent = root
+	}
+
 	var ctx opentracing.SpanContext
 	if h.parent != nil {
 		ctx = h.parent.Context()
 	}
-	h.sp = h.parent.Tracer().StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
+	h.sp = h.tr.StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
 	h.parent = h.sp
 	ext.SpanKindRPCClient.Set(h.sp)
 	ext.Component.Set(h.sp, "net/http")
@@ -118,22 +132,15 @@ func (h *Tracer) start(req *http.Request) opentracing.Span {
 
 // Finish finishes the span of the traced request.
 func (h *Tracer) Finish() {
-	h.root.Finish()
+	if h.root != nil {
+		h.root.Finish()
+	}
 }
 
-// Span returns the span of the traced request.
+// Span returns the root span of the traced request. This function
+// should only be called after the request has been executed.
 func (h *Tracer) Span() opentracing.Span {
 	return h.root
-}
-
-func newTrace(parent opentracing.Span) *Tracer {
-	var ctx opentracing.SpanContext
-	if parent != nil {
-		ctx = parent.Context()
-	}
-	root := parent.Tracer().StartSpan("HTTP", opentracing.ChildOf(ctx))
-	ext.SpanKindRPCClient.Set(root)
-	return &Tracer{root, root, nil}
 }
 
 func (h *Tracer) clientTrace() *httptrace.ClientTrace {
