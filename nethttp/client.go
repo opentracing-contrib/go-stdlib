@@ -33,15 +33,15 @@ type Transport struct {
 //
 // Example:
 //
-// 	http.DefaultClient.Transport = &nethttp.Transport{http.DefaultTransport}
+//  client := &http.Client{Transport: &nethttp.Transport{}}
 // 	req, err := http.NewRequest("GET", "http://google.com", nil)
 // 	if err != nil {
 // 		log.Fatal(err)
 // 	}
 // 	req, ht := nethttp.TraceRequest(parentSpan, req)
-// 	res, err := http.DefaultClient.Do(req)
+// 	res, err := client.Do(req)
 // 	if err != nil {
-// 		log.Println(err)
+// 		log.Fatal(err)
 // 	}
 // 	res.Body.Close()
 // 	ht.Finish()
