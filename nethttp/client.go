@@ -34,7 +34,7 @@ type Transport struct {
 //
 // Example:
 //
-//  client := &http.Client{Transport: &nethttp.Transport{}}
+// 	client := &http.Client{Transport: &nethttp.Transport{}}
 // 	req, err := http.NewRequest("GET", "http://google.com", nil)
 // 	if err != nil {
 // 		log.Fatal(err)
