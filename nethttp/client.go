@@ -20,8 +20,7 @@ const (
 
 // Transport wraps a RoundTripper. If a request is being traced with
 // Tracer, Transport will inject the current span into the headers,
-// set HTTP related tags on the span as well as finish the span after
-// the response body is closed.
+// and set HTTP related tags on the span.
 type Transport struct {
 	http.RoundTripper
 }
