@@ -20,8 +20,7 @@ const (
 
 // Transport wraps a RoundTripper. If a request is being traced with
 // Tracer, Transport will inject the current span into the headers,
-// set HTTP related tags on the span as well as finish the span after
-// the response body is closed.
+// and set HTTP related tags on the span.
 type Transport struct {
 	// The actual RoundTripper to use for the request. A nil
 	// RoundTripper defaults to http.DefaultTransport.
@@ -40,33 +39,29 @@ type Transport struct {
 // 		log.Fatal(err)
 // 	}
 // 	req = req.WithContext(opentracing.ContextWithSpan(req.Context(), parentSpan))
-// 	req = nethttp.TraceRequest(tracer, req)
+// 	req, ht := nethttp.TraceRequest(tracer, req)
 // 	res, err := client.Do(req)
 // 	if err != nil {
 // 		log.Fatal(err)
 // 	}
 // 	res.Body.Close()
-func TraceRequest(tr opentracing.Tracer, req *http.Request) *http.Request {
+// 	ht.Finish()
+func TraceRequest(tr opentracing.Tracer, req *http.Request) (*http.Request, *Tracer) {
 	ht := &Tracer{tr: tr}
 	ctx := httptrace.WithClientTrace(req.Context(), ht.clientTrace())
 	req = req.WithContext(context.WithValue(ctx, keyTracer, ht))
-	return req
+	return req, ht
 }
 
 type closeTracker struct {
 	io.ReadCloser
-	sp    opentracing.Span
-	root  opentracing.Span
-	first opentracing.Span
+	sp opentracing.Span
 }
 
 func (c closeTracker) Close() error {
 	err := c.ReadCloser.Close()
 	c.sp.LogEvent("Closed body")
 	c.sp.Finish()
-	if c.sp == c.first {
-		c.root.Finish()
-	}
 	return err
 }
 
@@ -92,33 +87,21 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if err != nil {
 		tracer.sp.Finish()
-		if tracer.sp == tracer.first {
-			tracer.root.Finish()
-		}
 		return resp, err
 	}
 	ext.HTTPStatusCode.Set(tracer.sp, uint16(resp.StatusCode))
 	if req.Method == "HEAD" {
 		tracer.sp.Finish()
-		if tracer.sp == tracer.first {
-			tracer.root.Finish()
-		}
 	} else {
-		resp.Body = closeTracker{
-			ReadCloser: resp.Body,
-			sp:         tracer.sp,
-			root:       tracer.root,
-			first:      tracer.first,
-		}
+		resp.Body = closeTracker{resp.Body, tracer.sp}
 	}
 	return resp, nil
 }
 
 type Tracer struct {
-	tr    opentracing.Tracer
-	root  opentracing.Span
-	first opentracing.Span
-	sp    opentracing.Span
+	tr   opentracing.Tracer
+	root opentracing.Span
+	sp   opentracing.Span
 }
 
 func (h *Tracer) start(req *http.Request) opentracing.Span {
@@ -135,13 +118,23 @@ func (h *Tracer) start(req *http.Request) opentracing.Span {
 
 	ctx := h.root.Context()
 	h.sp = h.tr.StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
-	if h.first == nil {
-		h.first = h.sp
-	}
 	ext.SpanKindRPCClient.Set(h.sp)
 	ext.Component.Set(h.sp, "net/http")
 
 	return h.sp
+}
+
+// Finish finishes the span of the traced request.
+func (h *Tracer) Finish() {
+	if h.root != nil {
+		h.root.Finish()
+	}
+}
+
+// Span returns the root span of the traced request. This function
+// should only be called after the request has been executed.
+func (h *Tracer) Span() opentracing.Span {
+	return h.root
 }
 
 func (h *Tracer) clientTrace() *httptrace.ClientTrace {
