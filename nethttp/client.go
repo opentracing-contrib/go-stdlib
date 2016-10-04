@@ -111,17 +111,13 @@ type Tracer struct {
 
 func (h *Tracer) start(req *http.Request) opentracing.Span {
 	if h.root == nil {
-		if parent := opentracing.SpanFromContext(req.Context()); parent != nil {
-			h.root = parent
-		} else {
-			// start a root span if Context has no existing trace
-			root := h.tr.StartSpan(
-				"HTTP Client",
-				opentracing.ChildOf(parent.Context()),
-			)
-			ext.SpanKindRPCClient.Set(root)
-			h.root = root
+		parent := opentracing.SpanFromContext(req.Context())
+		var spanctx opentracing.SpanContext
+		if parent != nil {
+			spanctx = parent.Context()
 		}
+		root := h.tr.StartSpan("HTTP Client", opentracing.ChildOf(spanctx))
+		h.root = root
 	}
 
 	ctx := h.root.Context()
