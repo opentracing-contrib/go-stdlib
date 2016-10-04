@@ -49,6 +49,7 @@ type Transport struct {
 // 			return err
 // 		}
 // 		res.Body.Close()
+// 		return nil
 //	}
 func TraceRequest(tr opentracing.Tracer, req *http.Request) (*http.Request, *Tracer) {
 	ht := &Tracer{tr: tr}
