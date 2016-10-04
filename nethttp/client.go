@@ -33,19 +33,24 @@ type Transport struct {
 //
 // Example:
 //
-//  client := &http.Client{Transport: &nethttp.Transport{}}
-// 	req, err := http.NewRequest("GET", "http://google.com", nil)
-// 	if err != nil {
-// 		log.Fatal(err)
+// 	func AskGoogle(ctx context.Context) error {
+// 		client := &http.Client{Transport: &nethttp.Transport{}}
+// 		req, err := http.NewRequest("GET", "http://google.com", nil)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		req = req.WithContext(ctx) // extend existing trace, if any
+//
+// 		req, ht := nethttp.TraceRequest(tracer, req)
+// 		defer ht.Finish()
+//
+// 		res, err := client.Do(req)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		res.Body.Close()
+// 		return nil
 // 	}
-// 	req = req.WithContext(opentracing.ContextWithSpan(req.Context(), parentSpan))
-// 	req, ht := nethttp.TraceRequest(tracer, req)
-// 	res, err := client.Do(req)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	res.Body.Close()
-// 	ht.Finish()
 func TraceRequest(tr opentracing.Tracer, req *http.Request) (*http.Request, *Tracer) {
 	ht := &Tracer{tr: tr}
 	ctx := httptrace.WithClientTrace(req.Context(), ht.clientTrace())
