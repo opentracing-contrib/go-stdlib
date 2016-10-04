@@ -111,8 +111,7 @@ func (h *Tracer) start(req *http.Request) opentracing.Span {
 		if parent != nil {
 			spanctx = parent.Context()
 		}
-		root := h.tr.StartSpan("HTTP", opentracing.ChildOf(spanctx))
-		ext.SpanKindRPCClient.Set(root)
+		root := h.tr.StartSpan("HTTP Client", opentracing.ChildOf(spanctx))
 		h.root = root
 	}
 
