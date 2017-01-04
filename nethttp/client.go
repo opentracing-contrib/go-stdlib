@@ -5,8 +5,10 @@ package nethttp
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptrace"
+	"strconv"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
@@ -159,7 +161,15 @@ func (h *Tracer) clientTrace() *httptrace.ClientTrace {
 }
 
 func (h *Tracer) getConn(hostPort string) {
-	ext.HTTPUrl.Set(h.sp, hostPort)
+	host, portString, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		ext.PeerHostname.Set(h.sp, hostPort)
+	} else {
+		ext.PeerHostname.Set(h.sp, host)
+		if port, err := strconv.Atoi(portString); err != nil {
+			ext.PeerPort.Set(h.sp, uint16(port))
+		}
+	}
 	h.sp.LogEvent("Get conn")
 }
 
