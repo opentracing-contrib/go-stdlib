@@ -32,7 +32,7 @@ type clientOptions struct {
 	disableClientTrace bool
 }
 
-// ClientOption contols the behavior of TraceRequest() function.
+// ClientOption contols the behavior of TraceRequest.
 type ClientOption func(*clientOptions)
 
 // OperationName returns a ClientOption that sets the operation
@@ -43,8 +43,8 @@ func OperationName(opName string) ClientOption {
 	}
 }
 
-// ClientTrace returns a ClientOption that turn on or off
-// extra instrumentation using httotrace.WithClientTrace.
+// ClientTrace returns a ClientOption that turns on or off
+// extra instrumentation via httptrace.WithClientTrace.
 func ClientTrace(enabled bool) ClientOption {
 	return func(options *clientOptions) {
 		options.disableClientTrace = !enabled
