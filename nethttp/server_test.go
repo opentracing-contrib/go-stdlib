@@ -21,7 +21,7 @@ func TestOperationNameOption(t *testing.T) {
 		opName  string
 	}{
 		{nil, "HTTP GET"},
-		{[]MWOption{OperationName(fn)}, "HTTP GET: /root"},
+		{[]MWOption{OperationNameFunc(fn)}, "HTTP GET: /root"},
 	}
 
 	for _, tt := range tests {

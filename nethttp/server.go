@@ -26,9 +26,9 @@ type mwOptions struct {
 // MWOption contols the behavior of the Middleware.
 type MWOption func(*mwOptions)
 
-// OperationName returns a MWOption that uses given function f
+// OperationNameFunc returns a MWOption that uses given function f
 // to generate operation name for each server-side span.
-func OperationName(f func(r *http.Request) string) MWOption {
+func OperationNameFunc(f func(r *http.Request) string) MWOption {
 	return func(options *mwOptions) {
 		options.opNameFunc = f
 	}
