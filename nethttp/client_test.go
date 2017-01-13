@@ -9,7 +9,7 @@ import (
 	"github.com/opentracing/opentracing-go/mocktracer"
 )
 
-func makeRequest(t *testing.T, url string) []*mocktracer.MockSpan {
+func makeRequest(t *testing.T, url string, options ...ClientOption) []*mocktracer.MockSpan {
 	tr := &mocktracer.MockTracer{}
 	span := tr.StartSpan("toplevel")
 	client := &http.Client{Transport: &Transport{}}
@@ -18,7 +18,7 @@ func makeRequest(t *testing.T, url string) []*mocktracer.MockSpan {
 		t.Fatal(err)
 	}
 	req = req.WithContext(opentracing.ContextWithSpan(req.Context(), span))
-	req, ht := TraceRequest(tr, req)
+	req, ht := TraceRequest(tr, req, options...)
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -43,18 +43,43 @@ func TestClientTrace(t *testing.T) {
 	defer srv.Close()
 
 	tests := []struct {
-		url string
-		num int
+		url    string
+		num    int
+		opts   []ClientOption
+		opName string
 	}{
-		{"/ok", 3},
-		{"/redirect", 4},
-		{"/fail", 3},
+		{url: "/ok", num: 3, opts: nil, opName: "HTTP Client"},
+		{url: "/redirect", num: 4, opts: []ClientOption{OperationName("client-span")}, opName: "client-span"},
+		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client"},
 	}
 
 	for _, tt := range tests {
-		spans := makeRequest(t, srv.URL+tt.url)
+		t.Log(tt.opName)
+		spans := makeRequest(t, srv.URL+tt.url, tt.opts...)
 		if got, want := len(spans), tt.num; got != want {
 			t.Fatalf("got %d spans, expected %d", got, want)
+		}
+		var rootSpan *mocktracer.MockSpan
+		for _, span := range spans {
+			if span.ParentID == 0 {
+				rootSpan = span
+				break
+			}
+		}
+		if rootSpan == nil {
+			t.Fatal("cannot find root span with ParentID==0")
+		}
+		foundClientSpan := false
+		for _, span := range spans {
+			if span.ParentID == rootSpan.SpanContext.SpanID {
+				foundClientSpan = true
+				if got, want := span.OperationName, tt.opName; got != want {
+					t.Fatalf("got %s operation name, expected %s", got, want)
+				}
+			}
+		}
+		if !foundClientSpan {
+			t.Fatal("cannot find client span")
 		}
 	}
 }
