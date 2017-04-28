@@ -69,12 +69,28 @@ func TestClientTrace(t *testing.T) {
 		if rootSpan == nil {
 			t.Fatal("cannot find root span with ParentID==0")
 		}
+
 		foundClientSpan := false
 		for _, span := range spans {
 			if span.ParentID == rootSpan.SpanContext.SpanID {
 				foundClientSpan = true
 				if got, want := span.OperationName, tt.opName; got != want {
 					t.Fatalf("got %s operation name, expected %s", got, want)
+				}
+			}
+			if span.OperationName == "HTTP GET" {
+				logs := span.Logs()
+				if len(logs) < 6 {
+					t.Fatalf("got %d expected at least %d log events", len(logs), 6)
+				}
+
+				key := logs[0].Fields[0].Key
+				if key != "event" {
+					t.Fatalf("got %s expected, %s", key, "event")
+				}
+				v := logs[0].Fields[0].ValueString
+				if v != "GetConn" {
+					t.Fatalf("got %s expected, %s", v, "GetConn")
 				}
 			}
 		}
