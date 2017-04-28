@@ -241,9 +241,10 @@ func (h *Tracer) connectStart(network, addr string) {
 func (h *Tracer) connectDone(network, addr string, err error) {
 	if err != nil {
 		h.sp.LogFields(
-			log.String("event", "ConnectDone"),
+			log.String("message", "ConnectDone"),
 			log.String("network", network),
 			log.String("addr", addr),
+			log.String("event", "error"),
 			log.Error(err),
 		)
 	} else {
@@ -266,7 +267,8 @@ func (h *Tracer) wait100Continue() {
 func (h *Tracer) wroteRequest(info httptrace.WroteRequestInfo) {
 	if info.Err != nil {
 		h.sp.LogFields(
-			log.String("event", "WroteRequest"),
+			log.String("message", "WroteRequest"),
+			log.String("event", "error"),
 			log.Error(info.Err),
 		)
 		ext.Error.Set(h.sp, true)
