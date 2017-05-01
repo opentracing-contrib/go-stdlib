@@ -3,6 +3,8 @@
 package nethttp
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -12,6 +14,27 @@ import (
 type statusCodeTracker struct {
 	http.ResponseWriter
 	status int
+}
+
+type statusCodeTrackerHijacker struct {
+	statusCodeTracker
+	jacker http.Hijacker
+}
+
+type getStatusCode interface {
+	statusCode() int
+}
+
+func (w *statusCodeTrackerHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return w.jacker.Hijack()
+}
+
+func (w *statusCodeTrackerHijacker) statusCode() int {
+	return w.statusCodeTracker.status
+}
+
+func (w *statusCodeTracker) statusCode() int {
+	return w.status
 }
 
 func (w *statusCodeTracker) WriteHeader(status int) {
@@ -68,12 +91,19 @@ func Middleware(tr opentracing.Tracer, h http.Handler, options ...MWOption) http
 		ext.HTTPMethod.Set(sp, r.Method)
 		ext.HTTPUrl.Set(sp, r.URL.String())
 		ext.Component.Set(sp, "net/http")
-		w = &statusCodeTracker{w, 200}
+
+		hijacker, ok := w.(http.Hijacker)
+		if ok {
+			w = &statusCodeTrackerHijacker{statusCodeTracker{w, 200}, hijacker}
+		} else {
+			w = &statusCodeTracker{w, 200}
+		}
+
 		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
 		h.ServeHTTP(w, r)
 
-		ext.HTTPStatusCode.Set(sp, uint16(w.(*statusCodeTracker).status))
+		ext.HTTPStatusCode.Set(sp, uint16(w.(getStatusCode).statusCode()))
 		sp.Finish()
 	}
 	return http.HandlerFunc(fn)
