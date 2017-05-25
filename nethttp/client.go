@@ -19,6 +19,8 @@ const (
 	keyTracer contextKey = iota
 )
 
+const defaultComponentName = "net/http"
+
 // Transport wraps a RoundTripper. If a request is being traced with
 // Tracer, Transport will inject the current span into the headers,
 // and set HTTP related tags on the span.
@@ -29,7 +31,8 @@ type Transport struct {
 }
 
 type clientOptions struct {
-	opName             string
+	operationName      string
+	componentName      string
 	disableClientTrace bool
 }
 
@@ -38,9 +41,17 @@ type ClientOption func(*clientOptions)
 
 // OperationName returns a ClientOption that sets the operation
 // name for the client-side span.
-func OperationName(opName string) ClientOption {
+func OperationName(operationName string) ClientOption {
 	return func(options *clientOptions) {
-		options.opName = opName
+		options.operationName = operationName
+	}
+}
+
+// ComponentName returns a ClientOption that sets the component
+// name for the client-side span.
+func ComponentName(componentName string) ClientOption {
+	return func(options *clientOptions) {
+		options.componentName = componentName
 	}
 }
 
@@ -150,18 +161,23 @@ func (h *Tracer) start(req *http.Request) opentracing.Span {
 		if parent != nil {
 			spanctx = parent.Context()
 		}
-		opName := h.opts.opName
-		if opName == "" {
-			opName = "HTTP Client"
+		operationName := h.opts.operationName
+		if operationName == "" {
+			operationName = "HTTP Client"
 		}
-		root := h.tr.StartSpan(opName, opentracing.ChildOf(spanctx))
+		root := h.tr.StartSpan(operationName, opentracing.ChildOf(spanctx))
 		h.root = root
 	}
 
 	ctx := h.root.Context()
 	h.sp = h.tr.StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
 	ext.SpanKindRPCClient.Set(h.sp)
-	ext.Component.Set(h.sp, "net/http")
+
+	componentName := h.opts.componentName
+	if componentName == "" {
+		componentName = defaultComponentName
+	}
+	ext.Component.Set(h.sp, componentName)
 
 	return h.sp
 }
