@@ -3,11 +3,16 @@
 package nethttp
 
 import (
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 )
+
+var ErrCannotHijack = errors.New("statusCodeTracker: can't cast parent ResponseWriter to Hijacker")
 
 type statusCodeTracker struct {
 	http.ResponseWriter
@@ -17,6 +22,14 @@ type statusCodeTracker struct {
 func (w *statusCodeTracker) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusCodeTracker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, ErrCannotHijack
+	}
+	return hj.Hijack()
 }
 
 type mwOptions struct {
