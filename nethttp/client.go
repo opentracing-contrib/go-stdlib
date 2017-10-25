@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"strings"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
@@ -242,8 +243,18 @@ func (h *Tracer) dnsStart(info httptrace.DNSStartInfo) {
 	)
 }
 
-func (h *Tracer) dnsDone(httptrace.DNSDoneInfo) {
-	h.sp.LogFields(log.String("event", "DNSDone"))
+func (h *Tracer) dnsDone(info httptrace.DNSDoneInfo) {
+	fields := []log.Field{log.String("event", "DNSDone")}
+	if info.Err == nil {
+		addrs := make([]string, 0, len(info.Addrs))
+		for _, addr := range info.Addrs {
+			addrs = append(addrs, addr.String())
+		}
+		fields = append(fields, log.String("addrs", strings.Join(addrs, ",")))
+	} else {
+		fields = append(fields, log.String("error", info.Err.Error()))
+	}
+	h.sp.LogFields(fields...)
 }
 
 func (h *Tracer) connectStart(network, addr string) {
