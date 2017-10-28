@@ -243,13 +243,14 @@ func (h *Tracer) dnsStart(info httptrace.DNSStartInfo) {
 }
 
 func (h *Tracer) dnsDone(info httptrace.DNSDoneInfo) {
-	h.sp.LogFields(log.String("event", "DNSDone"))
+	fields := []log.Field{log.String("event", "DNSDone")}
 	for _, addr := range info.Addrs {
-		h.sp.LogFields(log.String("addr", addr.String()))
+		fields = append(fields, log.String("addr", addr.String()))
 	}
 	if info.Err != nil {
-		h.sp.LogFields(log.Error(info.Err))
+		fields = append(fields, log.Error(info.Err))
 	}
+	h.sp.LogFields(fields...)
 }
 
 func (h *Tracer) connectStart(network, addr string) {
