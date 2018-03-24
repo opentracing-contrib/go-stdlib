@@ -16,3 +16,7 @@ following caveats:
 
 - **net/http**: Client and server instrumentation. *Only supported
   with Go 1.7 and later.*
+
+## License
+
+[BSD License](./LICENSE).
