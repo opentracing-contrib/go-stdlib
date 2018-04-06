@@ -19,6 +19,12 @@ func (w *statusCodeTracker) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+func (w *statusCodeTracker) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 type mwOptions struct {
 	opNameFunc    func(r *http.Request) string
 	spanObserver  func(span opentracing.Span, r *http.Request)
