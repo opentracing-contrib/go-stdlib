@@ -3,6 +3,8 @@
 package nethttp
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -23,6 +25,27 @@ func (w *statusCodeTracker) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+func (w *statusCodeTracker) CloseNotify() <-chan bool {
+	if cn, ok := w.ResponseWriter.(http.CloseNotifier); ok {
+		return cn.CloseNotify()
+	}
+	return nil
+}
+
+func (w *statusCodeTracker) Push(target string, opts *http.PushOptions) error {
+	if p, ok := w.ResponseWriter.(http.Pusher); ok {
+		return p.Push(target, opts)
+	}
+	return nil
+}
+
+func (w *statusCodeTracker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, nil
 }
 
 type mwOptions struct {
