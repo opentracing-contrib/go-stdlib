@@ -78,6 +78,11 @@ func Middleware(tr opentracing.Tracer, h http.Handler, options ...MWOption) http
 	return MiddlewareFunc(tr, h.ServeHTTP, options...)
 }
 
+// MiddlewareFunc wraps an http.HandlerFunc and traces incoming requests.
+// It behaves identically to the Middleware function above.
+//
+// Example:
+//   http.ListenAndServe("localhost:80", nethttp.MiddlewareFunc(tracer, MyHandler))
 func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOption) http.Handler {
 	opts := mwOptions{
 		opNameFunc: func(r *http.Request) string {
