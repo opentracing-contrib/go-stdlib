@@ -83,7 +83,7 @@ func Middleware(tr opentracing.Tracer, h http.Handler, options ...MWOption) http
 //
 // Example:
 //   http.ListenAndServe("localhost:80", nethttp.MiddlewareFunc(tracer, MyHandler))
-func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOption) http.Handler {
+func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOption) http.HandlerFunc {
 	opts := mwOptions{
 		opNameFunc: func(r *http.Request) string {
 			return "HTTP " + r.Method
