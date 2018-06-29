@@ -78,7 +78,7 @@ func Middleware(tr opentracing.Tracer, h http.Handler, options ...MWOption) http
 	return MiddlewareFunc(tr, h.ServeHTTP, options...)
 }
 
-func MiddlewareFunc(tr opentracing.Tracer, h func(http.ResponseWriter, *http.Request), options ...MWOption) http.Handler {
+func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOption) http.Handler {
 	opts := mwOptions{
 		opNameFunc: func(r *http.Request) string {
 			return "HTTP " + r.Method
