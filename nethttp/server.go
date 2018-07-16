@@ -3,6 +3,9 @@
 package nethttp
 
 import (
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -11,7 +14,18 @@ import (
 
 type statusCodeTracker struct {
 	http.ResponseWriter
-	status int
+	hijacker http.Hijacker
+	status   int
+}
+
+// Hijack implements the http.Hijacker interface.  This expands
+// the Response to fulfill http.Hijacker if the underlying
+// http.ResponseWriter supports it.
+func (w *statusCodeTracker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if w.hijacker == nil {
+		return nil, nil, errors.New("http.Hijacker not implemented by underlying http.ResponseWriter")
+	}
+	return w.hijacker.Hijack()
 }
 
 func (w *statusCodeTracker) WriteHeader(status int) {
@@ -107,7 +121,8 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		}
 		ext.Component.Set(sp, componentName)
 
-		w = &statusCodeTracker{w, 200}
+		hijacker, _ := w.(http.Hijacker)
+		w = &statusCodeTracker{ResponseWriter: w, hijacker: hijacker, status: 200}
 		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
 		h(w, r)
