@@ -5,19 +5,10 @@ package nethttp
 import (
 	"net/http"
 
+	"github.com/felixge/httpsnoop"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 )
-
-type statusCodeTracker struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusCodeTracker) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
 
 type mwOptions struct {
 	opNameFunc    func(r *http.Request) string
@@ -122,12 +113,19 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		}
 		ext.Component.Set(sp, componentName)
 
-		w = &statusCodeTracker{w, 200}
+		status := 200
+		w = httpsnoop.Wrap(w, httpsnoop.Hooks{
+			WriteHeader: func(next httpsnoop.WriteHeaderFunc) httpsnoop.WriteHeaderFunc {
+				return func(code int) {
+					status = code
+					next(code)
+				}
+			}})
 		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
 		h(w, r)
 
-		ext.HTTPStatusCode.Set(sp, uint16(w.(*statusCodeTracker).status))
+		ext.HTTPStatusCode.Set(sp, uint16(status))
 		sp.Finish()
 	}
 	return http.HandlerFunc(fn)
