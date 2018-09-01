@@ -121,7 +121,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	tracer, ok := req.Context().Value(keyTracer).(*Tracer)
 	if !ok {
-		return rt.RoundTrip(req)
+		req, tracer = TraceRequest(
+			opentracing.GlobalTracer(),
+			req,
+		)
 	}
 
 	tracer.start(req)
