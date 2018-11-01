@@ -21,6 +21,7 @@ func (w *statusCodeTracker) WriteHeader(status int) {
 
 type mwOptions struct {
 	opNameFunc    func(r *http.Request) string
+	spanFilter    func(r *http.Request) bool
 	spanObserver  func(span opentracing.Span, r *http.Request)
 	componentName string
 }
@@ -41,6 +42,15 @@ func OperationNameFunc(f func(r *http.Request) string) MWOption {
 func MWComponentName(componentName string) MWOption {
 	return func(options *mwOptions) {
 		options.componentName = componentName
+	}
+}
+
+// MWSpanFilter returns a MWOption that filters requests from creating a span
+// for the server-side span.
+// Span won't be created if it returns false.
+func MWSpanFilter(f func(r *http.Request) bool) MWOption {
+	return func(options *mwOptions) {
+		options.spanFilter = f
 	}
 }
 
@@ -88,12 +98,17 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		opNameFunc: func(r *http.Request) string {
 			return "HTTP " + r.Method
 		},
+		spanFilter:   func(r *http.Request) bool { return true },
 		spanObserver: func(span opentracing.Span, r *http.Request) {},
 	}
 	for _, opt := range options {
 		opt(&opts)
 	}
 	fn := func(w http.ResponseWriter, r *http.Request) {
+		if !opts.spanFilter(r) {
+			h(w, r)
+			return
+		}
 		ctx, _ := tr.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
 		sp := tr.StartSpan(opts.opNameFunc(r), ext.RPCServerOption(ctx))
 		ext.HTTPMethod.Set(sp, r.Method)
