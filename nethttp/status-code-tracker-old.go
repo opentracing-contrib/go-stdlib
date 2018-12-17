@@ -1,4 +1,4 @@
-// +build go1.8
+// +build go1.7 !go1.8
 
 package nethttp
 
@@ -25,10 +25,10 @@ func (w *statusCodeTracker) wrappedResponseWriter() http.ResponseWriter {
 	var (
 		hj, i0 = w.ResponseWriter.(http.Hijacker)
 		cn, i1 = w.ResponseWriter.(http.CloseNotifier)
-		pu, i2 = w.ResponseWriter.(http.Pusher)
 		fl, i3 = w.ResponseWriter.(http.Flusher)
 		rf, i4 = w.ResponseWriter.(io.ReaderFrom)
 	)
+	i2 := false
 
 	switch {
 	case !i0 && !i1 && !i2 && !i3 && !i4:
@@ -51,30 +51,6 @@ func (w *statusCodeTracker) wrappedResponseWriter() http.ResponseWriter {
 			http.Flusher
 			io.ReaderFrom
 		}{w, fl, rf}
-	case !i0 && !i1 && i2 && !i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.Pusher
-		}{w, pu}
-	case !i0 && !i1 && i2 && !i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.Pusher
-			io.ReaderFrom
-		}{w, pu, rf}
-	case !i0 && !i1 && i2 && i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.Pusher
-			http.Flusher
-		}{w, pu, fl}
-	case !i0 && !i1 && i2 && i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.Pusher
-			http.Flusher
-			io.ReaderFrom
-		}{w, pu, fl, rf}
 	case !i0 && i1 && !i2 && !i3 && !i4:
 		return struct {
 			http.ResponseWriter
@@ -99,34 +75,6 @@ func (w *statusCodeTracker) wrappedResponseWriter() http.ResponseWriter {
 			http.Flusher
 			io.ReaderFrom
 		}{w, cn, fl, rf}
-	case !i0 && i1 && i2 && !i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.CloseNotifier
-			http.Pusher
-		}{w, cn, pu}
-	case !i0 && i1 && i2 && !i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.CloseNotifier
-			http.Pusher
-			io.ReaderFrom
-		}{w, cn, pu, rf}
-	case !i0 && i1 && i2 && i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.CloseNotifier
-			http.Pusher
-			http.Flusher
-		}{w, cn, pu, fl}
-	case !i0 && i1 && i2 && i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.CloseNotifier
-			http.Pusher
-			http.Flusher
-			io.ReaderFrom
-		}{w, cn, pu, fl, rf}
 	case i0 && !i1 && !i2 && !i3 && !i4:
 		return struct {
 			http.ResponseWriter
@@ -151,34 +99,6 @@ func (w *statusCodeTracker) wrappedResponseWriter() http.ResponseWriter {
 			http.Flusher
 			io.ReaderFrom
 		}{w, hj, fl, rf}
-	case i0 && !i1 && i2 && !i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.Pusher
-		}{w, hj, pu}
-	case i0 && !i1 && i2 && !i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.Pusher
-			io.ReaderFrom
-		}{w, hj, pu, rf}
-	case i0 && !i1 && i2 && i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.Pusher
-			http.Flusher
-		}{w, hj, pu, fl}
-	case i0 && !i1 && i2 && i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.Pusher
-			http.Flusher
-			io.ReaderFrom
-		}{w, hj, pu, fl, rf}
 	case i0 && i1 && !i2 && !i3 && !i4:
 		return struct {
 			http.ResponseWriter
@@ -207,38 +127,6 @@ func (w *statusCodeTracker) wrappedResponseWriter() http.ResponseWriter {
 			http.Flusher
 			io.ReaderFrom
 		}{w, hj, cn, fl, rf}
-	case i0 && i1 && i2 && !i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.CloseNotifier
-			http.Pusher
-		}{w, hj, cn, pu}
-	case i0 && i1 && i2 && !i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.CloseNotifier
-			http.Pusher
-			io.ReaderFrom
-		}{w, hj, cn, pu, rf}
-	case i0 && i1 && i2 && i3 && !i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.CloseNotifier
-			http.Pusher
-			http.Flusher
-		}{w, hj, cn, pu, fl}
-	case i0 && i1 && i2 && i3 && i4:
-		return struct {
-			http.ResponseWriter
-			http.Hijacker
-			http.CloseNotifier
-			http.Pusher
-			http.Flusher
-			io.ReaderFrom
-		}{w, hj, cn, pu, fl, rf}
 	default:
 		return struct {
 			http.ResponseWriter
