@@ -1,6 +1,7 @@
 package nethttp
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -158,5 +159,43 @@ func TestSpanFilterOption(t *testing.T) {
 				t.Fatalf("spanCreated %t, ExpectToCreateSpan %t", spanCreated, testCase.ExpectToCreateSpan)
 			}
 		})
+	}
+}
+
+func TestUnwrapResponseWriter(t *testing.T) {
+	mux := http.NewServeMux()
+
+	assertFunc := func(w http.ResponseWriter, r *http.Request) {
+		otWrapper, ok := w.(ResponseWriterWrapper)
+		if !ok {
+			http.Error(w, "type assertion to ResponsewriterWrapper failed", http.StatusInternalServerError)
+			return
+		}
+
+		_, ok = otWrapper.UnwrapResponseWriter().(http.Flusher)
+		if !ok {
+			http.Error(w, "type assertion to http.Flusher failed", http.StatusInternalServerError)
+			return
+		}
+	}
+	mux.HandleFunc("/", http.HandlerFunc(assertFunc))
+	tr := &mocktracer.MockTracer{}
+	mw := Middleware(tr, mux)
+	srv := httptest.NewServer(mw)
+	defer srv.Close()
+
+	client := &http.Client{}
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("got %d code indicating server could not unwrap ResponseWriter: %s", resp.StatusCode, string(respBytes))
 	}
 }

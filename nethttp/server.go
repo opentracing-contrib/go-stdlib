@@ -19,6 +19,29 @@ func (w *statusCodeTracker) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+// ResponseWriterWrapper is an interface that can be used by existing HTTP handlers
+// that need to get at the underlying http.ResponseWriter, for example to cast it
+// to an http.Flusher.
+//
+// Example:
+// func ServeHTTP(w http.ResponseWriter, r *http.Request) {
+//     otResponseWriter, ok := w.(nethttp.ResponseWriterWrapper)
+//     if ok {
+//         w = otResponseWriter.UnwrapResponseWriter()
+//     }
+//
+//     flusher, ok := w.(http.Flusher)
+//     ... // use the flusher
+//     flusher.Flush()
+// }
+type ResponseWriterWrapper interface {
+	UnwrapResponseWriter() http.ResponseWriter
+}
+
+func (w *statusCodeTracker) UnwrapResponseWriter() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 type mwOptions struct {
 	opNameFunc    func(r *http.Request) string
 	spanFilter    func(r *http.Request) bool
