@@ -9,16 +9,6 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 )
 
-type statusCodeTracker struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusCodeTracker) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
-
 type mwOptions struct {
 	opNameFunc    func(r *http.Request) string
 	spanFilter    func(r *http.Request) bool
@@ -122,12 +112,12 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		}
 		ext.Component.Set(sp, componentName)
 
-		w = &statusCodeTracker{w, 200}
+		sct := &statusCodeTracker{w, 200}
 		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
-		h(w, r)
+		h(sct.wrappedResponseWriter(), r)
 
-		ext.HTTPStatusCode.Set(sp, uint16(w.(*statusCodeTracker).status))
+		ext.HTTPStatusCode.Set(sp, uint16(sct.status))
 		sp.Finish()
 	}
 	return http.HandlerFunc(fn)

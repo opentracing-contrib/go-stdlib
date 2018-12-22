@@ -160,3 +160,25 @@ func TestSpanFilterOption(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
+	tr := &mocktracer.MockTracer{}
+	mw := Middleware(tr, mux)
+	srv := httptest.NewServer(mw)
+	defer srv.Close()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			resp, err := http.Get(srv.URL)
+			if err != nil {
+				b.Fatalf("server returned error: %v", err)
+			}
+			err = resp.Body.Close()
+			if err != nil {
+				b.Fatalf("failed to close response: %v", err)
+			}
+		}
+	})
+}
