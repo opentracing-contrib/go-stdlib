@@ -161,6 +161,50 @@ func TestSpanFilterOption(t *testing.T) {
 	}
 }
 
+func TestURLTagOption(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
+
+	fn := func(u *url.URL) string {
+		// Log path only (no query parameters etc)
+		return u.Path
+	}
+
+	tests := []struct {
+		options []MWOption
+		url     string
+		tag     string
+	}{
+		{[]MWOption{}, "/root?token=123", "/root?token=123"},
+		{[]MWOption{MWURLTagFunc(fn)}, "/root?token=123", "/root"},
+	}
+
+	for _, tt := range tests {
+		testCase := tt
+		t.Run(testCase.tag, func(t *testing.T) {
+			tr := &mocktracer.MockTracer{}
+			mw := Middleware(tr, mux, testCase.options...)
+			srv := httptest.NewServer(mw)
+			defer srv.Close()
+
+			_, err := http.Get(srv.URL + testCase.url)
+			if err != nil {
+				t.Fatalf("server returned error: %v", err)
+			}
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+
+			tag := spans[0].Tags()["http.url"]
+			if got, want := tag, testCase.tag; got != want {
+				t.Fatalf("got %s tag name, expected %s", got, want)
+			}
+		})
+	}
+}
+
 func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
