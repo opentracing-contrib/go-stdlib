@@ -3,6 +3,7 @@ package nethttp
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -96,6 +97,50 @@ func TestClientTrace(t *testing.T) {
 		}
 		if !foundClientSpan {
 			t.Fatal("cannot find client span")
+		}
+	}
+}
+
+func TestClientCustomURL(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	fn := func(u *url.URL) string {
+		// Simulate redacting token
+		return srv.URL + u.Path + "?token=*"
+	}
+
+	tests := []struct {
+		opts []ClientOption
+		url  string
+		tag  string
+	}{
+		// These first cases fail early
+		{[]ClientOption{}, "/ok?token=a", srv.Listener.Addr().String()},
+		{[]ClientOption{URLTagFunc(fn)}, "/ok?token=c", srv.Listener.Addr().String()},
+		// Disable ClientTrace to fire RoundTrip
+		{[]ClientOption{ClientTrace(false)}, "/ok?token=b", srv.URL + "/ok?token=b"},
+		{[]ClientOption{ClientTrace(false), URLTagFunc(fn)}, "/ok?token=c", srv.URL + "/ok?token=*"},
+	}
+
+	for _, tt := range tests {
+		var clientSpan *mocktracer.MockSpan
+
+		spans := makeRequest(t, srv.URL+tt.url, tt.opts...)
+		for _, span := range spans {
+			if span.OperationName == "HTTP GET" {
+				clientSpan = span
+				break
+			}
+		}
+		if clientSpan == nil {
+			t.Fatal("cannot find client span")
+		}
+		tag := clientSpan.Tags()["http.url"]
+		if got, want := tag, tt.tag; got != want {
+			t.Fatalf("got %s tag name, expected %s", got, want)
 		}
 	}
 }
