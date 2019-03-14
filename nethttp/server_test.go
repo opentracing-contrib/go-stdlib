@@ -1,13 +1,14 @@
 package nethttp
 
 import (
+	"github.com/opentracing/opentracing-go/ext"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/mocktracer"
 )
 
@@ -200,6 +201,52 @@ func TestURLTagOption(t *testing.T) {
 			tag := spans[0].Tags()["http.url"]
 			if got, want := tag, testCase.tag; got != want {
 				t.Fatalf("got %s tag name, expected %s", got, want)
+			}
+		})
+	}
+}
+
+func TestSpanError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+	})
+
+	wantTags := map[string]interface{}{string(ext.Error): true}
+
+	tests := []struct {
+		url     string
+		Tags    map[string]interface{}
+	}{
+		{"/root", make(map[string]interface{})},
+		{"/error", wantTags},
+	}
+
+	for _, tt := range tests {
+		testCase := tt
+		t.Run(testCase.url, func(t *testing.T) {
+			tr := &mocktracer.MockTracer{}
+			mw := Middleware(tr, mux)
+			srv := httptest.NewServer(mw)
+			defer srv.Close()
+
+			_, err := http.Get(srv.URL + testCase.url)
+			if err != nil {
+				t.Fatalf("server returned error: %v", err)
+			}
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+
+			for k, v := range testCase.Tags {
+				if tag := spans[0].Tag(k); v != tag.(bool) {
+					t.Fatalf("got %v tag, expected %v", tag, v)
+				}
 			}
 		})
 	}
