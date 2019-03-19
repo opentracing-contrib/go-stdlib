@@ -113,14 +113,24 @@ func (c closeTracker) Close() error {
 	return err
 }
 
+// TracerFromRequest retrieves the Tracer from the request. If the request does
+// not have a Tracer it will return nil.
+func TracerFromRequest(req *http.Request) *Tracer {
+	tr, ok := req.Context().Value(keyTracer).(*Tracer)
+	if !ok {
+		return nil
+	}
+	return tr
+}
+
 // RoundTrip implements the RoundTripper interface.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt := t.RoundTripper
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	tracer, ok := req.Context().Value(keyTracer).(*Tracer)
-	if !ok {
+	tracer := TracerFromRequest(req)
+	if tracer == nil {
 		return rt.RoundTrip(req)
 	}
 
