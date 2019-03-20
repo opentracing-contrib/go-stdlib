@@ -43,16 +43,21 @@ func TestClientTrace(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
+	helloWorldObserver := func(s opentracing.Span, r *http.Request) {
+		s.SetTag("hello", "world")
+	}
+
 	tests := []struct {
-		url    string
-		num    int
-		opts   []ClientOption
-		opName string
-		err    bool
+		url          string
+		num          int
+		opts         []ClientOption
+		opName       string
+		expectedTags map[string]interface{}
 	}{
 		{url: "/ok", num: 3, opts: nil, opName: "HTTP Client"},
 		{url: "/redirect", num: 4, opts: []ClientOption{OperationName("client-span")}, opName: "client-span"},
-		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client", err: true},
+		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client", expectedTags: makeTags(string(ext.Error), true)},
+		{url: "/ok", num: 3, opts: []ClientOption{ClientSpanObserver(helloWorldObserver)}, opName: "HTTP Client", expectedTags: makeTags("hello", "world")},
 	}
 
 	for _, tt := range tests {
@@ -83,27 +88,22 @@ func TestClientTrace(t *testing.T) {
 			if span.OperationName == "HTTP GET" {
 				logs := span.Logs()
 				if len(logs) < 6 {
-					t.Fatalf("got %d expected at least %d log events", len(logs), 6)
+					t.Fatalf("got %d, expected at least %d log events", len(logs), 6)
 				}
 
 				key := logs[0].Fields[0].Key
 				if key != "event" {
-					t.Fatalf("got %s expected, %s", key, "event")
+					t.Fatalf("got %s, expected %s", key, "event")
 				}
 				v := logs[0].Fields[0].ValueString
 				if v != "GetConn" {
-					t.Fatalf("got %s expected, %s", v, "GetConn")
+					t.Fatalf("got %s, expected %s", v, "GetConn")
 				}
 
-				errTag := span.Tag(string(ext.Error))
-				if tt.err {
-					hasError, ok := errTag.(bool)
-					if !ok || !hasError {
-						t.Fatalf("got %v, expected error tag to be true", errTag)
-					}
-				} else {
-					if errTag != nil {
-						t.Fatalf("got %v, expected error tag to be nil", errTag)
+				for k, expected := range tt.expectedTags {
+					result := span.Tag(k)
+					if expected != result {
+						t.Fatalf("got %v, expected %v, for key %s", result, expected, k)
 					}
 				}
 			}
@@ -130,6 +130,15 @@ func TestTracerFromRequest(t *testing.T) {
 
 	ht = TracerFromRequest(req)
 	if ht != expected {
-		t.Fatalf("got %v expected %v", ht, expected)
+		t.Fatalf("got %v, expected %v", ht, expected)
 	}
+}
+
+func makeTags(keyVals ...interface{}) map[string]interface{} {
+	result := make(map[string]interface{}, len(keyVals)/2)
+	for i := 0; i < len(keyVals)-1; i += 2 {
+		key := keyVals[i].(string)
+		result[key] = keyVals[i+1]
+	}
+	return result
 }

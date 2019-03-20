@@ -34,6 +34,7 @@ type clientOptions struct {
 	operationName      string
 	componentName      string
 	disableClientTrace bool
+	spanObserver       func(span opentracing.Span, r *http.Request)
 }
 
 // ClientOption contols the behavior of TraceRequest.
@@ -63,6 +64,14 @@ func ClientTrace(enabled bool) ClientOption {
 	}
 }
 
+// ClientSpanObserver returns a ClientOption that observes the span
+// for the client-side span.
+func ClientSpanObserver(f func(span opentracing.Span, r *http.Request)) ClientOption {
+	return func(options *clientOptions) {
+		options.spanObserver = f
+	}
+}
+
 // TraceRequest adds a ClientTracer to req, tracing the request and
 // all requests caused due to redirects. When tracing requests this
 // way you must also use Transport.
@@ -88,7 +97,9 @@ func ClientTrace(enabled bool) ClientOption {
 // 		return nil
 // 	}
 func TraceRequest(tr opentracing.Tracer, req *http.Request, options ...ClientOption) (*http.Request, *Tracer) {
-	opts := &clientOptions{}
+	opts := &clientOptions{
+		spanObserver: func(_ opentracing.Span, _ *http.Request) {},
+	}
 	for _, opt := range options {
 		opt(opts)
 	}
@@ -138,6 +149,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	ext.HTTPMethod.Set(tracer.sp, req.Method)
 	ext.HTTPUrl.Set(tracer.sp, req.URL.String())
+	tracer.opts.spanObserver(tracer.sp, req)
 
 	carrier := opentracing.HTTPHeadersCarrier(req.Header)
 	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
