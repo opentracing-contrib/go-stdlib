@@ -148,6 +148,9 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 	ext.HTTPStatusCode.Set(tracer.sp, uint16(resp.StatusCode))
+	if resp.StatusCode >= http.StatusInternalServerError {
+		ext.Error.Set(tracer.sp, true)
+	}
 	if req.Method == "HEAD" {
 		tracer.sp.Finish()
 	} else {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/mocktracer"
 )
 
@@ -47,10 +48,11 @@ func TestClientTrace(t *testing.T) {
 		num    int
 		opts   []ClientOption
 		opName string
+		err    bool
 	}{
 		{url: "/ok", num: 3, opts: nil, opName: "HTTP Client"},
 		{url: "/redirect", num: 4, opts: []ClientOption{OperationName("client-span")}, opName: "client-span"},
-		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client"},
+		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client", err: true},
 	}
 
 	for _, tt := range tests {
@@ -91,6 +93,18 @@ func TestClientTrace(t *testing.T) {
 				v := logs[0].Fields[0].ValueString
 				if v != "GetConn" {
 					t.Fatalf("got %s expected, %s", v, "GetConn")
+				}
+
+				errTag := span.Tag(string(ext.Error))
+				if tt.err {
+					hasError, ok := errTag.(bool)
+					if !ok || !hasError {
+						t.Fatalf("got %v, expected error tag to be true", errTag)
+					}
+				} else {
+					if errTag != nil {
+						t.Fatalf("got %v, expected error tag to be nil", errTag)
+					}
 				}
 			}
 		}
