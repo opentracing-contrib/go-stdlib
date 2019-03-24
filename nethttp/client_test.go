@@ -99,3 +99,23 @@ func TestClientTrace(t *testing.T) {
 		}
 	}
 }
+
+func TestTracerFromRequest(t *testing.T) {
+	req, err := http.NewRequest("GET", "foobar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ht := TracerFromRequest(req)
+	if ht != nil {
+		t.Fatal("request should not have a tracer yet")
+	}
+
+	tr := &mocktracer.MockTracer{}
+	req, expected := TraceRequest(tr, req)
+
+	ht = TracerFromRequest(req)
+	if ht != expected {
+		t.Fatalf("got %v expected %v", ht, expected)
+	}
+}
