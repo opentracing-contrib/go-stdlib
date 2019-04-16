@@ -218,8 +218,8 @@ func TestSpanError(t *testing.T) {
 	wantTags := map[string]interface{}{string(ext.Error): true}
 
 	tests := []struct {
-		url     string
-		Tags    map[string]interface{}
+		url  string
+		Tags map[string]interface{}
 	}{
 		{"/root", make(map[string]interface{})},
 		{"/error", wantTags},
@@ -272,4 +272,71 @@ func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 			}
 		}
 	})
+}
+
+func TestMiddlewareHandlerPanic(t *testing.T) {
+	tests := []struct {
+		handler func(w http.ResponseWriter, r *http.Request)
+		status  uint16
+		isError bool
+		tag     string
+	}{
+		{
+			func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("OK"))
+			},
+			200,
+			false,
+			"OK",
+		},
+		{
+			func(w http.ResponseWriter, r *http.Request) {
+				panic("panic test")
+			},
+			0,
+			true,
+			"Panic",
+		},
+		{
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("InternalServerError"))
+			},
+			500,
+			true,
+			"InternalServerError",
+		},
+	}
+
+	for _, tt := range tests {
+		testCase := tt
+		t.Run(testCase.tag, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/root", testCase.handler)
+			tr := &mocktracer.MockTracer{}
+			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP))
+			defer srv.Close()
+
+			_, err := http.Get(srv.URL + "/root")
+			if err != nil {
+				t.Logf("server returned error: %v", err)
+			}
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+			actualStatus := spans[0].Tag(string(ext.HTTPStatusCode)).(uint16)
+			if testCase.status != actualStatus {
+				t.Fatalf("got status code %d, expected %d", actualStatus, testCase.status)
+			}
+			actualErr, ok := spans[0].Tag(string(ext.Error)).(bool)
+			if !ok {
+				actualErr = false
+			}
+			if testCase.isError != actualErr {
+				t.Fatalf("got span error %v, expected %v", actualErr, testCase.isError)
+			}
+		})
+	}
 }
