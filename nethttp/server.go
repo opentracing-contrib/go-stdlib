@@ -126,16 +126,18 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		}
 		ext.Component.Set(sp, componentName)
 
-		sct := &statusCodeTracker{w, 200}
+		sct := &statusCodeTracker{ResponseWriter: w}
 		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
-		h(sct.wrappedResponseWriter(), r)
+		defer func() {
+			ext.HTTPStatusCode.Set(sp, uint16(sct.status))
+			if sct.status >= http.StatusInternalServerError || !sct.wroteheader {
+				ext.Error.Set(sp, true)
+			}
+			sp.Finish()
+		}()
 
-		ext.HTTPStatusCode.Set(sp, uint16(sct.status))
-		if sct.status >= http.StatusInternalServerError {
-			ext.Error.Set(sp, true)
-		}
-		sp.Finish()
+		h(sct.wrappedResponseWriter(), r)
 	}
 	return http.HandlerFunc(fn)
 }
