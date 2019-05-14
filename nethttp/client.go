@@ -59,6 +59,8 @@ func ComponentName(componentName string) ClientOption {
 
 // ClientTrace returns a ClientOption that turns on or off
 // extra instrumentation via httptrace.WithClientTrace.
+// If this option is not used, the default behaviour is to
+// inject the span context.
 func ClientTrace(enabled bool) ClientOption {
 	return func(options *clientOptions) {
 		options.disableClientTrace = !enabled
