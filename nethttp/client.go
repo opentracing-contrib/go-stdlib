@@ -28,6 +28,7 @@ type Transport struct {
 	// The actual RoundTripper to use for the request. A nil
 	// RoundTripper defaults to http.DefaultTransport.
 	http.RoundTripper
+	Tracer opentracing.Tracer
 }
 
 type clientOptions struct {
@@ -140,7 +141,14 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	tracer := TracerFromRequest(req)
+
+	var tracer *Tracer
+	if t.Tracer != nil {
+		tracer = &Tracer{tr: t.Tracer}
+	} else {
+		tracer = TracerFromRequest(req)
+	}
+
 	if tracer == nil {
 		return rt.RoundTrip(req)
 	}
