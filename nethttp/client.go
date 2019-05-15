@@ -98,11 +98,11 @@ func ClientSpanObserver(f func(span opentracing.Span, r *http.Request)) ClientOp
 // 		return nil
 // 	}
 func TraceRequest(tr opentracing.Tracer, req *http.Request, options ...ClientOption) (*http.Request, *Tracer) {
-	opts := &clientOptions{
+	opts := clientOptions{
 		spanObserver: func(_ opentracing.Span, _ *http.Request) {},
 	}
 	for _, opt := range options {
-		opt(opts)
+		opt(&opts)
 	}
 	ht := &Tracer{tr: tr, opts: opts}
 	ctx := req.Context()
@@ -184,7 +184,7 @@ type Tracer struct {
 	tr   opentracing.Tracer
 	root opentracing.Span
 	sp   opentracing.Span
-	opts *clientOptions
+	opts clientOptions
 }
 
 func (h *Tracer) start(req *http.Request) opentracing.Span {
