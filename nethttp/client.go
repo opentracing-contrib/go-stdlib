@@ -98,9 +98,7 @@ func ClientSpanObserver(f func(span opentracing.Span, r *http.Request)) ClientOp
 // 		return nil
 // 	}
 func TraceRequest(tr opentracing.Tracer, req *http.Request, options ...ClientOption) (*http.Request, *Tracer) {
-	opts := clientOptions{
-		spanObserver: func(_ opentracing.Span, _ *http.Request) {},
-	}
+	opts := clientOptions{}
 	for _, opt := range options {
 		opt(&opts)
 	}
@@ -157,7 +155,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	ext.HTTPMethod.Set(tracer.sp, req.Method)
 	ext.HTTPUrl.Set(tracer.sp, req.URL.String())
-	tracer.opts.spanObserver(tracer.sp, req)
+
+	if tracer.opts.spanObserver != nil {
+		tracer.opts.spanObserver(tracer.sp, req)
+	}
 
 	carrier := opentracing.HTTPHeadersCarrier(req.Header)
 	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
