@@ -31,10 +31,11 @@ type Transport struct {
 }
 
 type clientOptions struct {
-	operationName      string
-	componentName      string
-	disableClientTrace bool
-	spanObserver       func(span opentracing.Span, r *http.Request)
+	operationName            string
+	componentName            string
+	disableClientTrace       bool
+	disableInjectSpanContext bool
+	spanObserver             func(span opentracing.Span, r *http.Request)
 }
 
 // ClientOption contols the behavior of TraceRequest.
@@ -61,6 +62,16 @@ func ComponentName(componentName string) ClientOption {
 func ClientTrace(enabled bool) ClientOption {
 	return func(options *clientOptions) {
 		options.disableClientTrace = !enabled
+	}
+}
+
+// InjectSpanContext returns a ClientOption that turns on or off
+// injection of the Span context in the request HTTP headers.
+// If this option is not used, the default behaviour is to
+// inject the span context.
+func InjectSpanContext(enabled bool) ClientOption {
+	return func(options *clientOptions) {
+		options.disableInjectSpanContext = !enabled
 	}
 }
 
@@ -151,8 +162,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ext.HTTPUrl.Set(tracer.sp, req.URL.String())
 	tracer.opts.spanObserver(tracer.sp, req)
 
-	carrier := opentracing.HTTPHeadersCarrier(req.Header)
-	tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
+	if !tracer.opts.disableInjectSpanContext {
+		carrier := opentracing.HTTPHeadersCarrier(req.Header)
+		tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
+	}
+
 	resp, err := rt.RoundTrip(req)
 
 	if err != nil {
