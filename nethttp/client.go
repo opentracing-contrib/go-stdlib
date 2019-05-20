@@ -28,6 +28,7 @@ type Transport struct {
 	// The actual RoundTripper to use for the request. A nil
 	// RoundTripper defaults to http.DefaultTransport.
 	http.RoundTripper
+	Tracer opentracing.Tracer
 }
 
 type clientOptions struct {
@@ -108,11 +109,9 @@ func ClientSpanObserver(f func(span opentracing.Span, r *http.Request)) ClientOp
 // 		return nil
 // 	}
 func TraceRequest(tr opentracing.Tracer, req *http.Request, options ...ClientOption) (*http.Request, *Tracer) {
-	opts := &clientOptions{
-		spanObserver: func(_ opentracing.Span, _ *http.Request) {},
-	}
+	opts := clientOptions{}
 	for _, opt := range options {
-		opt(opts)
+		opt(&opts)
 	}
 	ht := &Tracer{tr: tr, opts: opts}
 	ctx := req.Context()
@@ -151,7 +150,14 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	tracer := TracerFromRequest(req)
+
+	var tracer *Tracer
+	if t.Tracer != nil {
+		tracer = &Tracer{tr: t.Tracer}
+	} else {
+		tracer = TracerFromRequest(req)
+	}
+
 	if tracer == nil {
 		return rt.RoundTrip(req)
 	}
@@ -160,7 +166,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	ext.HTTPMethod.Set(tracer.sp, req.Method)
 	ext.HTTPUrl.Set(tracer.sp, req.URL.String())
-	tracer.opts.spanObserver(tracer.sp, req)
+
+	if tracer.opts.spanObserver != nil {
+		tracer.opts.spanObserver(tracer.sp, req)
+	}
 
 	if !tracer.opts.disableInjectSpanContext {
 		carrier := opentracing.HTTPHeadersCarrier(req.Header)
@@ -190,7 +199,7 @@ type Tracer struct {
 	tr   opentracing.Tracer
 	root opentracing.Span
 	sp   opentracing.Span
-	opts *clientOptions
+	opts clientOptions
 }
 
 func (h *Tracer) start(req *http.Request) opentracing.Span {
