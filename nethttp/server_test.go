@@ -340,3 +340,32 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 		})
 	}
 }
+
+func TestEmptyResponse(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	})
+
+	tr := &mocktracer.MockTracer{}
+	mw := Middleware(tr, mux)
+	srv := httptest.NewServer(mw)
+	defer srv.Close()
+
+	_, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("server returned error: %v", err)
+	}
+
+	spans := tr.FinishedSpans()
+	if got, want := len(spans), 1; got != want {
+		t.Fatalf("got %d spans, expected %d", got, want)
+	}
+
+	if code, v := spans[0].Tag(string(ext.HTTPStatusCode)).(uint16), uint16(200); code != v {
+		t.Fatalf("got %v tag, expected %v", code, v)
+	}
+
+	if err := spans[0].Tag(string(ext.Error)); err != nil {
+		t.Fatalf("got %v tag, expected %v", err, nil)
+	}
+}

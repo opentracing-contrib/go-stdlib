@@ -22,7 +22,6 @@ func (w *statusCodeTracker) WriteHeader(status int) {
 func (w *statusCodeTracker) Write(b []byte) (int, error) {
 	if !w.wroteheader {
 		w.wroteheader = true
-		w.status = 200
 	}
 	return w.ResponseWriter.Write(b)
 }
