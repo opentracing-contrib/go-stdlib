@@ -131,21 +131,13 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 
 		defer func() {
 			ext.HTTPStatusCode.Set(sp, uint16(sct.status))
-			if sct.status >= http.StatusInternalServerError || sct.status == 0 {
+			if sct.status >= http.StatusInternalServerError {
 				ext.Error.Set(sp, true)
 			}
 			sp.Finish()
 		}()
 
-		func() {
-			defer func() {
-				if err := recover(); err != nil {
-					sct.status = 0
-					panic(err)
-				}
-			}()
-			h(sct.wrappedResponseWriter(), r)
-		}()
+		h(sct.wrappedResponseWriter(), r)
 	}
 	return http.HandlerFunc(fn)
 }

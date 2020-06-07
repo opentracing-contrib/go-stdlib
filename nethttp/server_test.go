@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -211,18 +212,20 @@ func TestSpanError(t *testing.T) {
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	})
+	mux.HandleFunc("/no-status", func(w http.ResponseWriter, r *http.Request) {
+		// no status header
+	})
 	mux.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	})
 
-	wantTags := map[string]interface{}{string(ext.Error): true}
-
 	tests := []struct {
 		url  string
-		Tags map[string]interface{}
+		tags map[string]interface{}
 	}{
-		{"/root", make(map[string]interface{})},
-		{"/error", wantTags},
+		{url: "/root", tags: map[string]interface{}{"http.status_code": uint16(200)}},
+		{url: "/no-status", tags: map[string]interface{}{"http.status_code": uint16(200)}},
+		{url: "/error", tags: map[string]interface{}{"http.status_code": uint16(500), string(ext.Error): true}},
 	}
 
 	for _, tt := range tests {
@@ -243,9 +246,14 @@ func TestSpanError(t *testing.T) {
 				t.Fatalf("got %d spans, expected %d", got, want)
 			}
 
-			for k, v := range testCase.Tags {
-				if tag := spans[0].Tag(k); v != tag.(bool) {
-					t.Fatalf("got %v tag, expected %v", tag, v)
+			spanTags := spans[0].Tags()
+			for k, v := range testCase.tags {
+				if tag, ok := spanTags[k]; ok {
+					if !reflect.DeepEqual(tag, v) {
+						t.Fatalf("tag %s: got %v, expected %v", k, tag, v)
+					}
+				} else {
+					t.Fatalf("did not find expected tag %s", k)
 				}
 			}
 		})
