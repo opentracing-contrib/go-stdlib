@@ -15,6 +15,7 @@ type mwOptions struct {
 	spanFilter    func(r *http.Request) bool
 	spanObserver  func(span opentracing.Span, r *http.Request)
 	urlTagFunc    func(u *url.URL) string
+	ignorePanic   bool
 	componentName string
 }
 
@@ -60,6 +61,15 @@ func MWSpanObserver(f func(span opentracing.Span, r *http.Request)) MWOption {
 func MWURLTagFunc(f func(u *url.URL) string) MWOption {
 	return func(options *mwOptions) {
 		options.urlTagFunc = f
+	}
+}
+
+// IgnorePanic disables panic hanling behavior. Unless this option is set,
+// the middleware will catch panic and set error=true tag on the span,
+// as well as HTTP status code 500.
+func IgnorePanic() MWOption {
+	return func(options *mwOptions) {
+		options.ignorePanic = true
 	}
 }
 
@@ -131,11 +141,20 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 
 		defer func() {
 			ext.HTTPStatusCode.Set(sp, uint16(sct.status))
-			if sct.status >= http.StatusInternalServerError {
+			if sct.status >= http.StatusInternalServerError || sct.status == 0 {
 				ext.Error.Set(sp, true)
 			}
 			sp.Finish()
 		}()
+
+		if !opts.ignorePanic {
+			defer func() {
+				if err := recover(); err != nil {
+					sct.status = 0
+					panic(err)
+				}
+			}()
+		}
 
 		h(sct.wrappedResponseWriter(), r)
 	}

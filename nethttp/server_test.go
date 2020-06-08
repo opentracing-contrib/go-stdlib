@@ -284,45 +284,58 @@ func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 
 func TestMiddlewareHandlerPanic(t *testing.T) {
 	tests := []struct {
-		handler func(w http.ResponseWriter, r *http.Request)
-		status  uint16
-		isError bool
-		tag     string
+		handler     func(w http.ResponseWriter, r *http.Request)
+		ignorePanic bool
+		status      uint16
+		isError     bool
+		name        string
 	}{
 		{
-			func(w http.ResponseWriter, r *http.Request) {
+			name: "OK",
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("OK"))
 			},
-			200,
-			false,
-			"OK",
+			status:  200,
+			isError: false,
 		},
 		{
-			func(w http.ResponseWriter, r *http.Request) {
+			name: "Panic",
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				panic("panic test")
 			},
-			0,
-			true,
-			"Panic",
+			status:  0,
+			isError: true,
 		},
 		{
-			func(w http.ResponseWriter, r *http.Request) {
+			name: "Panic ignored",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				panic("panic test")
+			},
+			ignorePanic: true,
+			status:      200,
+			isError:     false,
+		},
+		{
+			name: "InternalServerError",
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("InternalServerError"))
 			},
-			500,
-			true,
-			"InternalServerError",
+			status:  500,
+			isError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		testCase := tt
-		t.Run(testCase.tag, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/root", testCase.handler)
 			tr := &mocktracer.MockTracer{}
-			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP))
+			var options []MWOption
+			if testCase.ignorePanic {
+				options = append(options, IgnorePanic())
+			}
+			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP, options...))
 			defer srv.Close()
 
 			_, err := http.Get(srv.URL + "/root")
