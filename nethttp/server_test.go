@@ -284,11 +284,10 @@ func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 
 func TestMiddlewareHandlerPanic(t *testing.T) {
 	tests := []struct {
-		handler     func(w http.ResponseWriter, r *http.Request)
-		ignorePanic bool
-		status      uint16
-		isError     bool
-		name        string
+		handler func(w http.ResponseWriter, r *http.Request)
+		status  uint16
+		isError bool
+		name    string
 	}{
 		{
 			name: "OK",
@@ -307,15 +306,6 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			isError: true,
 		},
 		{
-			name: "Panic ignored",
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				panic("panic test")
-			},
-			ignorePanic: true,
-			status:      200,
-			isError:     false,
-		},
-		{
 			name: "InternalServerError",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -331,11 +321,7 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/root", testCase.handler)
 			tr := &mocktracer.MockTracer{}
-			var options []MWOption
-			if testCase.ignorePanic {
-				options = append(options, IgnorePanic())
-			}
-			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP, options...))
+			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP))
 			defer srv.Close()
 
 			_, err := http.Get(srv.URL + "/root")
@@ -347,9 +333,12 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			if got, want := len(spans), 1; got != want {
 				t.Fatalf("got %d spans, expected %d", got, want)
 			}
-			actualStatus := spans[0].Tag(string(ext.HTTPStatusCode)).(uint16)
-			if testCase.status != actualStatus {
-				t.Fatalf("got status code %d, expected %d", actualStatus, testCase.status)
+			if testCase.status > 0 {
+				t.Logf("expecting status %d", testCase.status)
+				actualStatus := spans[0].Tag(string(ext.HTTPStatusCode))
+				if !reflect.DeepEqual(testCase.status, actualStatus) {
+					t.Fatalf("got status code %v, expected %d", actualStatus, testCase.status)
+				}
 			}
 			actualErr, ok := spans[0].Tag(string(ext.Error)).(bool)
 			if !ok {
@@ -382,7 +371,7 @@ func TestEmptyResponse(t *testing.T) {
 		t.Fatalf("got %d spans, expected %d", got, want)
 	}
 
-	if code, v := spans[0].Tag(string(ext.HTTPStatusCode)).(uint16), uint16(200); code != v {
+	if code, v := spans[0].Tag(string(ext.HTTPStatusCode)), uint16(200); !reflect.DeepEqual(code, v) {
 		t.Fatalf("got %v tag, expected %v", code, v)
 	}
 
