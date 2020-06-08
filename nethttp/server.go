@@ -125,9 +125,9 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		ext.HTTPUrl.Set(sp, opts.urlTagFunc(r.URL))
 		opts.spanObserver(sp, r)
 		ext.Component.Set(sp, componentName)
-		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
 		sct := &statusCodeTracker{ResponseWriter: w}
+		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
 
 		defer func() {
 			panicErr := recover()
