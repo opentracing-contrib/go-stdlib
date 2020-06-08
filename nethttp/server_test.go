@@ -257,14 +257,9 @@ func TestSpanErrorAndStatusCode(t *testing.T) {
 				t.Fatalf("got %d spans, expected %d", got, want)
 			}
 
-			spanTags := spans[0].Tags()
 			for k, v := range testCase.tags {
-				if tag, ok := spanTags[k]; ok {
-					if !reflect.DeepEqual(tag, v) {
-						t.Fatalf("tag %s: got %v, expected %v", k, tag, v)
-					}
-				} else {
-					t.Fatalf("did not find expected tag %s", k)
+				if tag := spans[0].Tag(k); !reflect.DeepEqual(tag, v) {
+					t.Fatalf("tag %s: got %v, expected %v", k, tag, v)
 				}
 			}
 		})
