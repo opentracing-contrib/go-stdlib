@@ -65,8 +65,7 @@ func MWURLTagFunc(f func(u *url.URL) string) MWOption {
 }
 
 // IgnorePanic disables panic hanling behavior. Unless this option is set,
-// the middleware will catch panic and set error=true tag on the span,
-// as well as HTTP status code 500.
+// the middleware will catch panic and set error=true tag on the span.
 func IgnorePanic() MWOption {
 	return func(options *mwOptions) {
 		options.ignorePanic = true
