@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/mocktracer"
 )
 
@@ -205,6 +207,65 @@ func TestURLTagOption(t *testing.T) {
 	}
 }
 
+func TestSpanErrorAndStatusCode(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/header-and-body", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/body-only", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/header-only", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/empty", func(w http.ResponseWriter, r *http.Request) {
+		// no status header
+	})
+	mux.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+	})
+
+	expStatusOK := map[string]interface{}{"http.status_code": uint16(200)}
+
+	tests := []struct {
+		url  string
+		tags map[string]interface{}
+	}{
+		{url: "/header-and-body", tags: expStatusOK},
+		{url: "/body-only", tags: expStatusOK},
+		{url: "/header-only", tags: expStatusOK},
+		{url: "/empty", tags: expStatusOK},
+		{url: "/error", tags: map[string]interface{}{"http.status_code": uint16(500), string(ext.Error): true}},
+	}
+
+	for _, tt := range tests {
+		testCase := tt
+		t.Run(testCase.url, func(t *testing.T) {
+			tr := &mocktracer.MockTracer{}
+			mw := Middleware(tr, mux)
+			srv := httptest.NewServer(mw)
+			defer srv.Close()
+
+			_, err := http.Get(srv.URL + testCase.url)
+			if err != nil {
+				t.Fatalf("server returned error: %v", err)
+			}
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+
+			for k, v := range testCase.tags {
+				if tag := spans[0].Tag(k); !reflect.DeepEqual(tag, v) {
+					t.Fatalf("tag %s: got %v, expected %v", k, tag, v)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
@@ -225,4 +286,70 @@ func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 			}
 		}
 	})
+}
+
+func TestMiddlewareHandlerPanic(t *testing.T) {
+	tests := []struct {
+		handler func(w http.ResponseWriter, r *http.Request)
+		status  uint16
+		isError bool
+		name    string
+	}{
+		{
+			name: "OK",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("OK"))
+			},
+			status:  200,
+			isError: false,
+		},
+		{
+			name: "Panic",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				panic("panic test")
+			},
+			status:  0,
+			isError: true,
+		},
+		{
+			name: "InternalServerError",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("InternalServerError"))
+			},
+			status:  500,
+			isError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/root", testCase.handler)
+			tr := &mocktracer.MockTracer{}
+			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP))
+			defer srv.Close()
+
+			_, err := http.Get(srv.URL + "/root")
+			if err != nil {
+				t.Logf("server returned error: %v", err)
+			}
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+			actualStatus := spans[0].Tag(string(ext.HTTPStatusCode))
+			if testCase.status > 0 && !reflect.DeepEqual(testCase.status, actualStatus) {
+				t.Fatalf("got status code %v, expected %d", actualStatus, testCase.status)
+			}
+			actualErr, ok := spans[0].Tag(string(ext.Error)).(bool)
+			if !ok {
+				actualErr = false
+			}
+			if testCase.isError != actualErr {
+				t.Fatalf("got span error %v, expected %v", actualErr, testCase.isError)
+			}
+		})
+	}
 }
