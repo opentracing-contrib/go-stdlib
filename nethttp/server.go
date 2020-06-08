@@ -123,8 +123,8 @@ func MiddlewareFunc(tr opentracing.Tracer, h http.HandlerFunc, options ...MWOpti
 		sp := tr.StartSpan(opts.opNameFunc(r), ext.RPCServerOption(ctx))
 		ext.HTTPMethod.Set(sp, r.Method)
 		ext.HTTPUrl.Set(sp, opts.urlTagFunc(r.URL))
-		opts.spanObserver(sp, r)
 		ext.Component.Set(sp, componentName)
+		opts.spanObserver(sp, r)
 
 		sct := &statusCodeTracker{ResponseWriter: w}
 		r = r.WithContext(opentracing.ContextWithSpan(r.Context(), sp))
