@@ -207,24 +207,35 @@ func TestURLTagOption(t *testing.T) {
 	}
 }
 
-func TestSpanError(t *testing.T) {
+func TestSpanErrorAndStatusCode(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/header-and-body", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/body-only", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/header-only", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	})
-	mux.HandleFunc("/no-status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/empty", func(w http.ResponseWriter, r *http.Request) {
 		// no status header
 	})
 	mux.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	})
 
+	expStatusOK := map[string]interface{}{"http.status_code": uint16(200)}
+
 	tests := []struct {
 		url  string
 		tags map[string]interface{}
 	}{
-		{url: "/root", tags: map[string]interface{}{"http.status_code": uint16(200)}},
-		{url: "/no-status", tags: map[string]interface{}{"http.status_code": uint16(200)}},
+		{url: "/header-and-body", tags: expStatusOK},
+		{url: "/body-only", tags: expStatusOK},
+		{url: "/header-only", tags: expStatusOK},
+		{url: "/empty", tags: expStatusOK},
 		{url: "/error", tags: map[string]interface{}{"http.status_code": uint16(500), string(ext.Error): true}},
 	}
 
@@ -348,34 +359,5 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 				t.Fatalf("got span error %v, expected %v", actualErr, testCase.isError)
 			}
 		})
-	}
-}
-
-func TestEmptyResponse(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-	})
-
-	tr := &mocktracer.MockTracer{}
-	mw := Middleware(tr, mux)
-	srv := httptest.NewServer(mw)
-	defer srv.Close()
-
-	_, err := http.Get(srv.URL)
-	if err != nil {
-		t.Fatalf("server returned error: %v", err)
-	}
-
-	spans := tr.FinishedSpans()
-	if got, want := len(spans), 1; got != want {
-		t.Fatalf("got %d spans, expected %d", got, want)
-	}
-
-	if code, v := spans[0].Tag(string(ext.HTTPStatusCode)), uint16(200); !reflect.DeepEqual(code, v) {
-		t.Fatalf("got %v tag, expected %v", code, v)
-	}
-
-	if err := spans[0].Tag(string(ext.Error)); err != nil {
-		t.Fatalf("got %v tag, expected %v", err, nil)
 	}
 }
