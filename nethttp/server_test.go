@@ -339,12 +339,9 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			if got, want := len(spans), 1; got != want {
 				t.Fatalf("got %d spans, expected %d", got, want)
 			}
-			if testCase.status > 0 {
-				t.Logf("expecting status %d", testCase.status)
-				actualStatus := spans[0].Tag(string(ext.HTTPStatusCode))
-				if !reflect.DeepEqual(testCase.status, actualStatus) {
-					t.Fatalf("got status code %v, expected %d", actualStatus, testCase.status)
-				}
+			actualStatus := spans[0].Tag(string(ext.HTTPStatusCode))
+			if testCase.status > 0 && !reflect.DeepEqual(testCase.status, actualStatus) {
+				t.Fatalf("got status code %v, expected %d", actualStatus, testCase.status)
 			}
 			actualErr, ok := spans[0].Tag(string(ext.Error)).(bool)
 			if !ok {
