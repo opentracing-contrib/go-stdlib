@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -206,23 +207,36 @@ func TestURLTagOption(t *testing.T) {
 	}
 }
 
-func TestSpanError(t *testing.T) {
+func TestSpanErrorAndStatusCode(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/header-and-body", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/body-only", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+	mux.HandleFunc("/header-only", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/empty", func(w http.ResponseWriter, r *http.Request) {
+		// no status header
 	})
 	mux.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	})
 
-	wantTags := map[string]interface{}{string(ext.Error): true}
+	expStatusOK := map[string]interface{}{"http.status_code": uint16(200)}
 
 	tests := []struct {
 		url  string
-		Tags map[string]interface{}
+		tags map[string]interface{}
 	}{
-		{"/root", make(map[string]interface{})},
-		{"/error", wantTags},
+		{url: "/header-and-body", tags: expStatusOK},
+		{url: "/body-only", tags: expStatusOK},
+		{url: "/header-only", tags: expStatusOK},
+		{url: "/empty", tags: expStatusOK},
+		{url: "/error", tags: map[string]interface{}{"http.status_code": uint16(500), string(ext.Error): true}},
 	}
 
 	for _, tt := range tests {
@@ -243,9 +257,9 @@ func TestSpanError(t *testing.T) {
 				t.Fatalf("got %d spans, expected %d", got, want)
 			}
 
-			for k, v := range testCase.Tags {
-				if tag := spans[0].Tag(k); v != tag.(bool) {
-					t.Fatalf("got %v tag, expected %v", tag, v)
+			for k, v := range testCase.tags {
+				if tag := spans[0].Tag(k); !reflect.DeepEqual(tag, v) {
+					t.Fatalf("tag %s: got %v, expected %v", k, tag, v)
 				}
 			}
 		})
@@ -279,38 +293,37 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 		handler func(w http.ResponseWriter, r *http.Request)
 		status  uint16
 		isError bool
-		tag     string
+		name    string
 	}{
 		{
-			func(w http.ResponseWriter, r *http.Request) {
+			name: "OK",
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte("OK"))
 			},
-			200,
-			false,
-			"OK",
+			status:  200,
+			isError: false,
 		},
 		{
-			func(w http.ResponseWriter, r *http.Request) {
+			name: "Panic",
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				panic("panic test")
 			},
-			0,
-			true,
-			"Panic",
+			status:  0,
+			isError: true,
 		},
 		{
-			func(w http.ResponseWriter, r *http.Request) {
+			name: "InternalServerError",
+			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("InternalServerError"))
 			},
-			500,
-			true,
-			"InternalServerError",
+			status:  500,
+			isError: true,
 		},
 	}
 
-	for _, tt := range tests {
-		testCase := tt
-		t.Run(testCase.tag, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/root", testCase.handler)
 			tr := &mocktracer.MockTracer{}
@@ -326,9 +339,9 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			if got, want := len(spans), 1; got != want {
 				t.Fatalf("got %d spans, expected %d", got, want)
 			}
-			actualStatus := spans[0].Tag(string(ext.HTTPStatusCode)).(uint16)
-			if testCase.status != actualStatus {
-				t.Fatalf("got status code %d, expected %d", actualStatus, testCase.status)
+			actualStatus := spans[0].Tag(string(ext.HTTPStatusCode))
+			if testCase.status > 0 && !reflect.DeepEqual(testCase.status, actualStatus) {
+				t.Fatalf("got status code %v, expected %d", actualStatus, testCase.status)
 			}
 			actualErr, ok := spans[0].Tag(string(ext.Error)).(bool)
 			if !ok {
