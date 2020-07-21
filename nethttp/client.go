@@ -223,8 +223,7 @@ func (h *Tracer) start(req *http.Request) opentracing.Span {
 	}
 
 	ctx := h.root.Context()
-	h.sp = h.tr.StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx))
-	ext.SpanKindRPCClient.Set(h.sp)
+	h.sp = h.tr.StartSpan("HTTP "+req.Method, opentracing.ChildOf(ctx), ext.SpanKindRPCClient)
 
 	componentName := h.opts.componentName
 	if componentName == "" {
