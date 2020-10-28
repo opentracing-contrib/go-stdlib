@@ -1,6 +1,9 @@
 package nethttp
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -133,6 +136,64 @@ func TestTracerFromRequest(t *testing.T) {
 	if ht != expected {
 		t.Fatalf("got %v, expected %v", ht, expected)
 	}
+}
+
+func TestWriteCloserFromRequest(t *testing.T) {
+	wait := make(chan bool, 0)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			wait <- true
+		}()
+
+		w.Header().Set("Upgrade", "websocket")
+		w.Header().Set("Connection", "Upgrade")
+		w.WriteHeader(http.StatusSwitchingProtocols)
+
+		hijacker := w.(http.Hijacker)
+		_, rw, err := hijacker.Hijack()
+
+		if err != nil {
+			t.Fatal("Failed to hijack connection")
+		}
+
+		line, _, err := rw.ReadLine()
+		if string(line) != "ping" {
+			t.Fatalf("Expected 'ping' received %q", string(line))
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+	}))
+
+	var buf bytes.Buffer
+	req, err := http.NewRequest("POST", srv.URL, &buf)
+	req.Header.Set("Connection", "upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Proto = "HTTP/1.1"
+	req.ProtoMajor = 1
+	req.ProtoMinor = 1
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tr := &mocktracer.MockTracer{}
+	req, _ = TraceRequest(tr, req)
+
+	client := &http.Client{Transport: &Transport{}}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rw, ok := resp.Body.(io.ReadWriteCloser)
+	if !ok {
+		t.Fatal("resp.Body is not a io.ReadWriteCloser")
+	}
+
+	fmt.Fprint(rw, "ping\n")
+	<-wait
+	rw.Close()
 }
 
 func TestInjectSpanContext(t *testing.T) {

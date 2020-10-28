@@ -149,6 +149,18 @@ func (c closeTracker) Close() error {
 	return err
 }
 
+type writerCloseTracker struct {
+	io.ReadWriteCloser
+	sp opentracing.Span
+}
+
+func (c writerCloseTracker) Close() error {
+	err := c.ReadWriteCloser.Close()
+	c.sp.LogFields(log.String("event", "ClosedBody"))
+	c.sp.Finish()
+	return err
+}
+
 // TracerFromRequest retrieves the Tracer from the request. If the request does
 // not have a Tracer it will return nil.
 func TracerFromRequest(req *http.Request) *Tracer {
@@ -194,7 +206,12 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method == "HEAD" {
 		tracer.sp.Finish()
 	} else {
-		resp.Body = closeTracker{resp.Body, tracer.sp}
+		readWriteCloser, ok := resp.Body.(io.ReadWriteCloser)
+		if ok {
+			resp.Body = writerCloseTracker{readWriteCloser, tracer.sp}
+		} else {
+			resp.Body = closeTracker{resp.Body, tracer.sp}
+		}
 	}
 	return resp, nil
 }
