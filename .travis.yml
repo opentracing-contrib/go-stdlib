@@ -5,6 +5,10 @@ go:
   - 1.14.x
   - tip
 
+arch:
+  - amd64
+  - ppc64le
+
 script:
   - go test -v -cover -race ./...
 
