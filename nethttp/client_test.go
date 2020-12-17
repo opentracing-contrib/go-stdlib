@@ -288,8 +288,8 @@ func TestClientCustomURL(t *testing.T) {
 		tag  string
 	}{
 		// These first cases fail early
-		{[]ClientOption{}, "/ok?token=a", srv.Listener.Addr().String()},
-		{[]ClientOption{URLTagFunc(fn)}, "/ok?token=c", srv.Listener.Addr().String()},
+		{[]ClientOption{}, "/ok?token=a", srv.URL + "/ok?token=a"},
+		{[]ClientOption{URLTagFunc(fn)}, "/ok?token=c", srv.URL + "/ok?token=*"},
 		// Disable ClientTrace to fire RoundTrip
 		{[]ClientOption{ClientTrace(false)}, "/ok?token=b", srv.URL + "/ok?token=b"},
 		{[]ClientOption{ClientTrace(false), URLTagFunc(fn)}, "/ok?token=c", srv.URL + "/ok?token=*"},
