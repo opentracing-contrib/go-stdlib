@@ -312,5 +312,12 @@ func TestClientCustomURL(t *testing.T) {
 		if got, want := tag, tt.tag; got != want {
 			t.Fatalf("got %s tag name, expected %s", got, want)
 		}
+		peerAddress, ok := clientSpan.Tags()["peer.address"]
+		if !ok {
+			t.Fatal("cannot find peer.address tag")
+		}
+		if peerAddress != srv.Listener.Addr().String() {
+			t.Fatalf("got %s want %s in peer.address tag", peerAddress, srv.Listener.Addr().String())
+		}
 	}
 }

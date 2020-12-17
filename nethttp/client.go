@@ -34,7 +34,7 @@ type Transport struct {
 type clientOptions struct {
 	operationName            string
 	componentName            string
-	urlTagFunc         func(u *url.URL) string
+	urlTagFunc               func(u *url.URL) string
 	disableClientTrace       bool
 	disableInjectSpanContext bool
 	spanObserver             func(span opentracing.Span, r *http.Request)
@@ -186,6 +186,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	ext.HTTPMethod.Set(tracer.sp, req.Method)
 	ext.HTTPUrl.Set(tracer.sp, tracer.opts.urlTagFunc(req.URL))
+	ext.PeerAddress.Set(tracer.sp, req.URL.Host)
 	tracer.opts.spanObserver(tracer.sp, req)
 
 	if !tracer.opts.disableInjectSpanContext {
@@ -282,7 +283,7 @@ func (h *Tracer) clientTrace() *httptrace.ClientTrace {
 }
 
 func (h *Tracer) getConn(hostPort string) {
-	h.sp.LogFields(log.String("event", "GetConn"))
+	h.sp.LogFields(log.String("event", "GetConn"), log.String("hostPort", hostPort))
 }
 
 func (h *Tracer) gotConn(info httptrace.GotConnInfo) {
