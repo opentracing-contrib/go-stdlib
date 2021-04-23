@@ -99,7 +99,7 @@ func TestSpanObserverOption(t *testing.T) {
 				t.Fatalf("got %s operation name, expected %s", got, want)
 			}
 
-			defaultLength := 5
+			defaultLength := 6
 			if len(spans[0].Tags()) != len(testCase.Tags)+defaultLength {
 				t.Fatalf("got tag length %d, expected %d", len(spans[0].Tags()), len(testCase.Tags))
 			}
@@ -266,9 +266,82 @@ func TestSpanErrorAndStatusCode(t *testing.T) {
 	}
 }
 
+func TestSpanResponseSize(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/with-body", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("12345"))
+	})
+	mux.HandleFunc("/no-body", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+
+
+	expBodySize := map[string]interface{}{"http.response_size": 5}
+
+	tests := []struct {
+		url  string
+		tags map[string]interface{}
+	}{
+		{url: "/with-body", tags: expBodySize},
+		{url: "/no-body", tags: map[string]interface{}{}},
+	}
+
+	for _, tt := range tests {
+		testCase := tt
+		t.Run(testCase.url, func(t *testing.T) {
+			tr := &mocktracer.MockTracer{}
+			mw := Middleware(tr, mux)
+			srv := httptest.NewServer(mw)
+			defer srv.Close()
+
+			_, err := http.Get(srv.URL + testCase.url)
+			if err != nil {
+				t.Fatalf("server returned error: %v", err)
+			}
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+
+			for k, v := range testCase.tags {
+				if tag := spans[0].Tag(k); !reflect.DeepEqual(tag, v) {
+					t.Fatalf("tag %s: got %v, expected %v", k, tag, v)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
+	tr := &mocktracer.MockTracer{}
+	mw := Middleware(tr, mux)
+	srv := httptest.NewServer(mw)
+	defer srv.Close()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			resp, err := http.Get(srv.URL)
+			if err != nil {
+				b.Fatalf("server returned error: %v", err)
+			}
+			err = resp.Body.Close()
+			if err != nil {
+				b.Fatalf("failed to close response: %v", err)
+			}
+		}
+	})
+}
+
+func BenchmarkResponseSizeTrackingOverhead(b *testing.B) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("12345"))
+	})
 	tr := &mocktracer.MockTracer{}
 	mw := Middleware(tr, mux)
 	srv := httptest.NewServer(mw)

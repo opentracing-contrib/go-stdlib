@@ -7,25 +7,28 @@ import (
 	"net/http"
 )
 
-type statusCodeTracker struct {
+type metricsTracker struct {
 	http.ResponseWriter
 	status int
+	size   int
 }
 
-func (w *statusCodeTracker) WriteHeader(status int) {
+func (w *metricsTracker) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
 }
 
-func (w *statusCodeTracker) Write(b []byte) (int, error) {
-	return w.ResponseWriter.Write(b)
+func (w *metricsTracker) Write(b []byte) (int, error) {
+	size, err := w.ResponseWriter.Write(b)
+	w.size += size
+	return size, err
 }
 
 // wrappedResponseWriter returns a wrapped version of the original
 // ResponseWriter and only implements the same combination of additional
 // interfaces as the original.  This implementation is based on
 // https://github.com/felixge/httpsnoop.
-func (w *statusCodeTracker) wrappedResponseWriter() http.ResponseWriter {
+func (w *metricsTracker) wrappedResponseWriter() http.ResponseWriter {
 	var (
 		hj, i0 = w.ResponseWriter.(http.Hijacker)
 		cn, i1 = w.ResponseWriter.(http.CloseNotifier)
