@@ -193,7 +193,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		carrier := opentracing.HTTPHeadersCarrier(req.Header)
 		tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
 	}
-
+	req = req.WithContext(opentracing.ContextWithSpan(req.Context(), tracer.sp))
 	resp, err := rt.RoundTrip(req)
 
 	if err != nil {
