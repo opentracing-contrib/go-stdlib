@@ -1,3 +1,4 @@
+//go:build go1.7
 // +build go1.7
 
 package nethttp
@@ -182,36 +183,36 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return rt.RoundTrip(req)
 	}
 
-	tracer.start(req)
+	sp := tracer.start(req)
 
-	ext.HTTPMethod.Set(tracer.sp, req.Method)
-	ext.HTTPUrl.Set(tracer.sp, tracer.opts.urlTagFunc(req.URL))
-	ext.PeerAddress.Set(tracer.sp, req.URL.Host)
-	tracer.opts.spanObserver(tracer.sp, req)
+	ext.HTTPMethod.Set(sp, req.Method)
+	ext.HTTPUrl.Set(sp, tracer.opts.urlTagFunc(req.URL))
+	ext.PeerAddress.Set(sp, req.URL.Host)
+	tracer.opts.spanObserver(sp, req)
 
 	if !tracer.opts.disableInjectSpanContext {
 		carrier := opentracing.HTTPHeadersCarrier(req.Header)
-		tracer.sp.Tracer().Inject(tracer.sp.Context(), opentracing.HTTPHeaders, carrier)
+		sp.Tracer().Inject(sp.Context(), opentracing.HTTPHeaders, carrier)
 	}
 
 	resp, err := rt.RoundTrip(req)
 
 	if err != nil {
-		tracer.sp.Finish()
+		sp.Finish()
 		return resp, err
 	}
-	ext.HTTPStatusCode.Set(tracer.sp, uint16(resp.StatusCode))
+	ext.HTTPStatusCode.Set(sp, uint16(resp.StatusCode))
 	if resp.StatusCode >= http.StatusInternalServerError {
-		ext.Error.Set(tracer.sp, true)
+		ext.Error.Set(sp, true)
 	}
 	if req.Method == "HEAD" {
-		tracer.sp.Finish()
+		sp.Finish()
 	} else {
 		readWriteCloser, ok := resp.Body.(io.ReadWriteCloser)
 		if ok {
-			resp.Body = writerCloseTracker{readWriteCloser, tracer.sp}
+			resp.Body = writerCloseTracker{readWriteCloser, sp}
 		} else {
-			resp.Body = closeTracker{resp.Body, tracer.sp}
+			resp.Body = closeTracker{resp.Body, sp}
 		}
 	}
 	return resp, nil
