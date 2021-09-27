@@ -41,7 +41,7 @@ type clientOptions struct {
 	spanObserver             func(span opentracing.Span, r *http.Request)
 }
 
-// ClientOption contols the behavior of TraceRequest.
+// ClientOption controls the behavior of TraceRequest.
 type ClientOption func(*clientOptions)
 
 // OperationName returns a ClientOption that sets the operation
@@ -369,3 +369,83 @@ func (h *Tracer) wroteRequest(info httptrace.WroteRequestInfo) {
 		h.sp.LogFields(log.String("event", "WroteRequest"))
 	}
 }
+
+// TracingTransport is an http.RoundTripper that automatically invokes TraceRequest for all requests.
+//
+// Usage:
+//
+// 		client := http.Client{Transport: &nethttp.TracingTransport{...}}
+//
+// 		res, err := client.Do(...)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		defer res.Body.Close()  // required if not HEAD request
+//
+// 		process(res) // your code
+//
+type TracingTransport struct {
+	// Transport is the underlying nethttp.Transport used to actually RoundTrip the request.
+	Transport Transport
+	// Tracer will be used to trace each request. Defaults to opentracing.GlobalTracer()
+	Tracer opentracing.Tracer
+	// RequestOptions allows customizing ClientOption's per request.
+	RequestOptions func(r *http.Request) []ClientOption
+}
+
+// RoundTrip implements http.RoundTripper for TracingTransport
+func (t *TracingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	tracer := t.Tracer
+	if tracer == nil {
+		tracer = opentracing.GlobalTracer()
+	}
+
+	var opts []ClientOption
+	if t.RequestOptions != nil {
+		opts = t.RequestOptions(r)
+	}
+	r, tr := TraceRequest(tracer, r, opts...)
+
+	resp, err := t.Transport.RoundTrip(r)
+	if err != nil {
+		return resp, err
+	}
+
+	if r.Method == "HEAD" {
+		tr.Finish()
+		return resp, err
+	}
+
+	// wrap the body so we can trace to Close.
+	if readWriteCloser, ok := resp.Body.(io.ReadWriteCloser); ok {
+		resp.Body = writerCloseTracer{readWriteCloser, tr}
+	} else {
+		resp.Body = closeTracer{resp.Body, tr}
+	}
+
+	return resp, err
+}
+
+type closeTracer struct {
+	io.ReadCloser
+	tr *Tracer
+}
+
+func (c closeTracer) Close() error {
+	err := c.ReadCloser.Close()
+	c.tr.Finish()
+	return err
+}
+
+type writerCloseTracer struct {
+	io.ReadWriteCloser
+	tr *Tracer
+}
+
+func (c writerCloseTracer) Close() error {
+	err := c.ReadWriteCloser.Close()
+	c.tr.Finish()
+	return err
+}
+
+var _ http.RoundTripper = &TracingTransport{}

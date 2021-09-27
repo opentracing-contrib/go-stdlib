@@ -276,7 +276,6 @@ func TestSpanResponseSize(t *testing.T) {
 		w.WriteHeader(200)
 	})
 
-
 	expBodySize := map[string]interface{}{"http.response_size": 5}
 
 	tests := []struct {
