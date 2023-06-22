@@ -321,3 +321,51 @@ func TestClientCustomURL(t *testing.T) {
 		}
 	}
 }
+
+func TestTracingTransport(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "HEAD" {
+			return
+		}
+		if _, err := w.Write([]byte(r.URL.Query().Get("echo"))); err != nil {
+			t.Error(err)
+			w.WriteHeader(500)
+		}
+	}))
+	defer server.Close()
+
+	tracer := mocktracer.New()
+	client := server.Client()
+	tt := &TracingTransport{Tracer: tracer}
+	tt.Transport.RoundTripper = client.Transport
+	client.Transport = tt
+
+	resp, err := client.Get(server.URL + "/?echo=foo")
+	noErr(t, err)
+	all, err := io.ReadAll(resp.Body)
+	noErr(t, err)
+	if string(all) != "foo" {
+		t.Errorf("incorrect response %s", all)
+	}
+	noErr(t, resp.Body.Close())
+
+	if len(tracer.FinishedSpans()) != 2 {
+		t.Error("span not recorded")
+	}
+
+	tracer.Reset()
+
+	resp, err = client.Head(server.URL + "/?echo=foo")
+	noErr(t, err)
+
+	if len(tracer.FinishedSpans()) != 2 {
+		t.Error("HEAD span not recorded")
+	}
+}
+
+func noErr(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
