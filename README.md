@@ -1,5 +1,10 @@
 # go-stdlib
 
+[![CI](https://github.com/opentracing-contrib/go-stdlib/actions/workflows/ci.yml/badge.svg)](https://github.com/opentracing-contrib/go-stdlib/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/opentracing-contrib/go-stdlib)](https://goreportcard.com/report/github.com/opentracing-contrib/go-stdlib)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/opentracing-contrib/go-stdlib)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/opentracing-contrib/ggo-stdlibc?logo=github&sort=semver)](https://github.com/opentracing-contrib/go-stdlib/releases/latest)
+
 This repository contains OpenTracing instrumentation for packages in
 the Go standard library.
 
