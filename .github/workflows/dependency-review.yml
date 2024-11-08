@@ -1,0 +1,22 @@
+name: Dependency review
+on:
+  pull_request:
+    branches: 
+      - master
+
+permissions:
+  contents: read
+  # Write permissions for pull-requests are required for using the `comment-summary-in-pr` option, comment out if you aren't using this option
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: "opentracing-contrib/common/dependency-review-config.yml@main"
