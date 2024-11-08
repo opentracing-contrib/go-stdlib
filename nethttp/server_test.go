@@ -1,6 +1,7 @@
 package nethttp
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 )
 
 func TestOperationNameOption(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
 
@@ -22,16 +24,17 @@ func TestOperationNameOption(t *testing.T) {
 	}
 
 	tests := []struct {
-		options []MWOption
 		opName  string
+		options []MWOption
 	}{
-		{nil, "HTTP GET"},
-		{[]MWOption{OperationNameFunc(fn)}, "HTTP GET: /root"},
+		{"HTTP GET", nil},
+		{"HTTP GET: /root", []MWOption{OperationNameFunc(fn)}},
 	}
 
 	for _, tt := range tests {
 		testCase := tt
 		t.Run(testCase.opName, func(t *testing.T) {
+			t.Parallel()
 			tr := &mocktracer.MockTracer{}
 			mw := Middleware(tr, mux, testCase.options...)
 			srv := httptest.NewServer(mw)
@@ -55,6 +58,7 @@ func TestOperationNameOption(t *testing.T) {
 }
 
 func TestSpanObserverOption(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
 
@@ -67,19 +71,20 @@ func TestSpanObserverOption(t *testing.T) {
 	wantTags := map[string]interface{}{"http.uri": "/"}
 
 	tests := []struct {
-		options []MWOption
-		opName  string
 		Tags    map[string]interface{}
+		opName  string
+		options []MWOption
 	}{
 		{nil, "HTTP GET", nil},
-		{[]MWOption{OperationNameFunc(opNamefn)}, "HTTP GET: /root", nil},
-		{[]MWOption{MWSpanObserver(spanObserverfn)}, "HTTP GET", wantTags},
-		{[]MWOption{OperationNameFunc(opNamefn), MWSpanObserver(spanObserverfn)}, "HTTP GET: /root", wantTags},
+		{nil, "HTTP GET: /root", []MWOption{OperationNameFunc(opNamefn)}},
+		{wantTags, "HTTP GET", []MWOption{MWSpanObserver(spanObserverfn)}},
+		{wantTags, "HTTP GET: /root", []MWOption{OperationNameFunc(opNamefn), MWSpanObserver(spanObserverfn)}},
 	}
 
 	for _, tt := range tests {
 		testCase := tt
 		t.Run(testCase.opName, func(t *testing.T) {
+			t.Parallel()
 			tr := &mocktracer.MockTracer{}
 			mw := Middleware(tr, mux, testCase.options...)
 			srv := httptest.NewServer(mw)
@@ -104,7 +109,7 @@ func TestSpanObserverOption(t *testing.T) {
 				t.Fatalf("got tag length %d, expected %d", len(spans[0].Tags()), len(testCase.Tags))
 			}
 			for k, v := range testCase.Tags {
-				if tag := spans[0].Tag(k); v != tag.(string) {
+				if tag, ok := spans[0].Tag(k).(string); !ok || v != tag {
 					t.Fatalf("got %v tag, expected %v", tag, v)
 				}
 			}
@@ -112,32 +117,34 @@ func TestSpanObserverOption(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest,tparallel
 func TestSpanFilterOption(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
 
 	spanFilterfn := func(r *http.Request) bool {
 		return !strings.HasPrefix(r.Header.Get("User-Agent"), "kube-probe")
 	}
-	noAgentReq, _ := http.NewRequest("GET", "/root", nil)
+	noAgentReq, _ := http.NewRequest(http.MethodGet, "/root", nil)
 	noAgentReq.Header.Del("User-Agent")
-	probeReq1, _ := http.NewRequest("GET", "/root", nil)
+	probeReq1, _ := http.NewRequest(http.MethodGet, "/root", nil)
 	probeReq1.Header.Add("User-Agent", "kube-probe/1.12")
-	probeReq2, _ := http.NewRequest("GET", "/root", nil)
+	probeReq2, _ := http.NewRequest(http.MethodGet, "/root", nil)
 	probeReq2.Header.Add("User-Agent", "kube-probe/9.99")
-	postmanReq, _ := http.NewRequest("GET", "/root", nil)
+	postmanReq, _ := http.NewRequest(http.MethodGet, "/root", nil)
 	postmanReq.Header.Add("User-Agent", "PostmanRuntime/7.3.0")
 	tests := []struct {
-		options            []MWOption
 		request            *http.Request
 		opName             string
+		options            []MWOption
 		ExpectToCreateSpan bool
 	}{
-		{nil, noAgentReq, "No filter", true},
-		{[]MWOption{MWSpanFilter(spanFilterfn)}, noAgentReq, "No User-Agent", true},
-		{[]MWOption{MWSpanFilter(spanFilterfn)}, probeReq1, "User-Agent: kube-probe/1.12", false},
-		{[]MWOption{MWSpanFilter(spanFilterfn)}, probeReq2, "User-Agent: kube-probe/9.99", false},
-		{[]MWOption{MWSpanFilter(spanFilterfn)}, postmanReq, "User-Agent: PostmanRuntime/7.3.0", true},
+		{noAgentReq, "No filter", nil, true},
+		{noAgentReq, "No filter", []MWOption{MWSpanFilter(spanFilterfn)}, true},
+		{probeReq1, "User-Agent: kube-probe/1.12", []MWOption{MWSpanFilter(spanFilterfn)}, false},
+		{probeReq2, "User-Agent: kube-probe/9.99", []MWOption{MWSpanFilter(spanFilterfn)}, false},
+		{postmanReq, "User-Agent: PostmanRuntime/7.3.0", []MWOption{MWSpanFilter(spanFilterfn)}, true},
 	}
 
 	for _, tt := range tests {
@@ -164,6 +171,7 @@ func TestSpanFilterOption(t *testing.T) {
 }
 
 func TestURLTagOption(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
 
@@ -173,17 +181,18 @@ func TestURLTagOption(t *testing.T) {
 	}
 
 	tests := []struct {
-		options []MWOption
 		url     string
 		tag     string
+		options []MWOption
 	}{
-		{[]MWOption{}, "/root?token=123", "/root?token=123"},
-		{[]MWOption{MWURLTagFunc(fn)}, "/root?token=123", "/root"},
+		{"/root?token=123", "/root?token=123", []MWOption{}},
+		{"/root?token=123", "/root", []MWOption{MWURLTagFunc(fn)}},
 	}
 
 	for _, tt := range tests {
 		testCase := tt
 		t.Run(testCase.tag, func(t *testing.T) {
+			t.Parallel()
 			tr := &mocktracer.MockTracer{}
 			mw := Middleware(tr, mux, testCase.options...)
 			srv := httptest.NewServer(mw)
@@ -208,29 +217,34 @@ func TestURLTagOption(t *testing.T) {
 }
 
 func TestSpanErrorAndStatusCode(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/header-and-body", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		w.Write([]byte("OK"))
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	})
 	mux.HandleFunc("/body-only", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	})
 	mux.HandleFunc("/header-only", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/empty", func(w http.ResponseWriter, r *http.Request) {
 		// no status header
 	})
 	mux.HandleFunc("/error", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 
 	expStatusOK := map[string]interface{}{"http.status_code": uint16(200)}
 
 	tests := []struct {
-		url  string
 		tags map[string]interface{}
+		url  string
 	}{
 		{url: "/header-and-body", tags: expStatusOK},
 		{url: "/body-only", tags: expStatusOK},
@@ -242,15 +256,22 @@ func TestSpanErrorAndStatusCode(t *testing.T) {
 	for _, tt := range tests {
 		testCase := tt
 		t.Run(testCase.url, func(t *testing.T) {
+			t.Parallel()
 			tr := &mocktracer.MockTracer{}
 			mw := Middleware(tr, mux)
 			srv := httptest.NewServer(mw)
 			defer srv.Close()
 
-			_, err := http.Get(srv.URL + testCase.url)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+testCase.url, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("server returned error: %v", err)
 			}
+			defer resp.Body.Close()
 
 			spans := tr.FinishedSpans()
 			if got, want := len(spans), 1; got != want {
@@ -267,21 +288,22 @@ func TestSpanErrorAndStatusCode(t *testing.T) {
 }
 
 func TestSpanResponseSize(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/with-body", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		w.Write([]byte("12345"))
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("12345")); err != nil {
+			t.Fatalf("failed to write response body: %v", err)
+		}
 	})
 	mux.HandleFunc("/no-body", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	})
-
-
 	expBodySize := map[string]interface{}{"http.response_size": 5}
 
 	tests := []struct {
-		url  string
 		tags map[string]interface{}
+		url  string
 	}{
 		{url: "/with-body", tags: expBodySize},
 		{url: "/no-body", tags: map[string]interface{}{}},
@@ -290,15 +312,22 @@ func TestSpanResponseSize(t *testing.T) {
 	for _, tt := range tests {
 		testCase := tt
 		t.Run(testCase.url, func(t *testing.T) {
+			t.Parallel()
 			tr := &mocktracer.MockTracer{}
 			mw := Middleware(tr, mux)
 			srv := httptest.NewServer(mw)
 			defer srv.Close()
 
-			_, err := http.Get(srv.URL + testCase.url)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+testCase.url, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("server returned error: %v", err)
 			}
+			defer resp.Body.Close()
 
 			spans := tr.FinishedSpans()
 			if got, want := len(spans), 1; got != want {
@@ -339,8 +368,10 @@ func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 func BenchmarkResponseSizeTrackingOverhead(b *testing.B) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		w.Write([]byte("12345"))
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("12345")); err != nil {
+			b.Fatalf("failed to write response body: %v", err)
+		}
 	})
 	tr := &mocktracer.MockTracer{}
 	mw := Middleware(tr, mux)
@@ -362,18 +393,21 @@ func BenchmarkResponseSizeTrackingOverhead(b *testing.B) {
 }
 
 func TestMiddlewareHandlerPanic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		handler func(w http.ResponseWriter, r *http.Request)
+		name    string
 		status  uint16
 		isError bool
-		name    string
 	}{
 		{
 			name: "OK",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Write([]byte("OK"))
+				if _, err := w.Write([]byte("OK")); err != nil {
+					t.Fatalf("failed to write response body: %v", err)
+				}
 			},
-			status:  200,
+			status:  http.StatusOK,
 			isError: false,
 		},
 		{
@@ -388,15 +422,19 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			name: "InternalServerError",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("InternalServerError"))
+				if _, err := w.Write([]byte("InternalServerError")); err != nil {
+					t.Fatalf("failed to write response body: %v", err)
+				}
 			},
-			status:  500,
+			status:  http.StatusInternalServerError,
 			isError: true,
 		},
 	}
 
-	for _, testCase := range tests {
+	for _, tc := range tests {
+		testCase := tc
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 			mux := http.NewServeMux()
 			mux.HandleFunc("/root", testCase.handler)
 			tr := &mocktracer.MockTracer{}

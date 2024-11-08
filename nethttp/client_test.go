@@ -2,6 +2,7 @@ package nethttp
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,10 +16,11 @@ import (
 )
 
 func makeRequest(t *testing.T, url string, options ...ClientOption) []*mocktracer.MockSpan {
+	t.Helper()
 	tr := &mocktracer.MockTracer{}
 	span := tr.StartSpan("toplevel")
 	client := &http.Client{Transport: &Transport{}}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,6 +38,7 @@ func makeRequest(t *testing.T, url string, options ...ClientOption) []*mocktrace
 }
 
 func TestClientTrace(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {})
 	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
@@ -45,81 +48,86 @@ func TestClientTrace(t *testing.T) {
 		http.Error(w, "failure", http.StatusInternalServerError)
 	})
 	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	helloWorldObserver := func(s opentracing.Span, r *http.Request) {
 		s.SetTag("hello", "world")
 	}
 
 	tests := []struct {
-		url          string
-		num          int
-		opts         []ClientOption
-		opName       string
 		expectedTags map[string]interface{}
+		url          string
+		opName       string
+		opts         []ClientOption
+		num          int
 	}{
 		{url: "/ok", num: 3, opts: nil, opName: "HTTP Client"},
 		{url: "/redirect", num: 4, opts: []ClientOption{OperationName("client-span")}, opName: "client-span"},
-		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client", expectedTags: makeTags(string(ext.Error), true)},
-		{url: "/ok", num: 3, opts: []ClientOption{ClientSpanObserver(helloWorldObserver)}, opName: "HTTP Client", expectedTags: makeTags("hello", "world")},
+		{url: "/fail", num: 3, opts: nil, opName: "HTTP Client", expectedTags: makeTags(t, string(ext.Error), true)},
+		{url: "/ok", num: 3, opts: []ClientOption{ClientSpanObserver(helloWorldObserver)}, opName: "HTTP Client", expectedTags: makeTags(t, "hello", "world")},
 	}
 
 	for _, tt := range tests {
-		t.Log(tt.opName)
-		spans := makeRequest(t, srv.URL+tt.url, tt.opts...)
-		if got, want := len(spans), tt.num; got != want {
-			t.Fatalf("got %d spans, expected %d", got, want)
-		}
-		var rootSpan *mocktracer.MockSpan
-		for _, span := range spans {
-			if span.ParentID == 0 {
-				rootSpan = span
-				break
+		tt := tt
+		t.Run(tt.url, func(t *testing.T) {
+			t.Parallel()
+			t.Log(tt.opName)
+			spans := makeRequest(t, srv.URL+tt.url, tt.opts...)
+			if got, want := len(spans), tt.num; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
 			}
-		}
-		if rootSpan == nil {
-			t.Fatal("cannot find root span with ParentID==0")
-		}
-
-		foundClientSpan := false
-		for _, span := range spans {
-			if span.ParentID == rootSpan.SpanContext.SpanID {
-				foundClientSpan = true
-				if got, want := span.OperationName, tt.opName; got != want {
-					t.Fatalf("got %s operation name, expected %s", got, want)
+			var rootSpan *mocktracer.MockSpan
+			for _, span := range spans {
+				if span.ParentID == 0 {
+					rootSpan = span
+					break
 				}
 			}
-			if span.OperationName == "HTTP GET" {
-				logs := span.Logs()
-				if len(logs) < 6 {
-					t.Fatalf("got %d, expected at least %d log events", len(logs), 6)
-				}
+			if rootSpan == nil {
+				t.Fatal("cannot find root span with ParentID==0")
+			}
 
-				key := logs[0].Fields[0].Key
-				if key != "event" {
-					t.Fatalf("got %s, expected %s", key, "event")
+			foundClientSpan := false
+			for _, span := range spans {
+				if span.ParentID == rootSpan.SpanContext.SpanID {
+					foundClientSpan = true
+					if got, want := span.OperationName, tt.opName; got != want {
+						t.Fatalf("got %s operation name, expected %s", got, want)
+					}
 				}
-				v := logs[0].Fields[0].ValueString
-				if v != "GetConn" {
-					t.Fatalf("got %s, expected %s", v, "GetConn")
-				}
+				if span.OperationName == "HTTP GET" {
+					logs := span.Logs()
+					if len(logs) < 6 {
+						t.Fatalf("got %d, expected at least %d log events", len(logs), 6)
+					}
 
-				for k, expected := range tt.expectedTags {
-					result := span.Tag(k)
-					if expected != result {
-						t.Fatalf("got %v, expected %v, for key %s", result, expected, k)
+					key := logs[0].Fields[0].Key
+					if key != "event" {
+						t.Fatalf("got %s, expected %s", key, "event")
+					}
+					v := logs[0].Fields[0].ValueString
+					if v != "GetConn" {
+						t.Fatalf("got %s, expected %s", v, "GetConn")
+					}
+
+					for k, expected := range tt.expectedTags {
+						result := span.Tag(k)
+						if expected != result {
+							t.Fatalf("got %v, expected %v, for key %s", result, expected, k)
+						}
 					}
 				}
 			}
-		}
-		if !foundClientSpan {
-			t.Fatal("cannot find client span")
-		}
+			if !foundClientSpan {
+				t.Fatal("cannot find client span")
+			}
+		})
 	}
 }
 
 func TestTracerFromRequest(t *testing.T) {
-	req, err := http.NewRequest("GET", "foobar", nil)
+	t.Parallel()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "foobar", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +147,8 @@ func TestTracerFromRequest(t *testing.T) {
 }
 
 func TestWriteCloserFromRequest(t *testing.T) {
-	wait := make(chan bool, 0)
+	t.Parallel()
+	wait := make(chan bool)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			wait <- true
@@ -149,9 +158,12 @@ func TestWriteCloserFromRequest(t *testing.T) {
 		w.Header().Set("Connection", "Upgrade")
 		w.WriteHeader(http.StatusSwitchingProtocols)
 
-		hijacker := w.(http.Hijacker)
-		_, rw, err := hijacker.Hijack()
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("ResponseWriter does not implement http.Hijacker")
+		}
 
+		_, rw, err := hijacker.Hijack()
 		if err != nil {
 			t.Fatal("Failed to hijack connection")
 		}
@@ -167,15 +179,15 @@ func TestWriteCloserFromRequest(t *testing.T) {
 	}))
 
 	var buf bytes.Buffer
-	req, err := http.NewRequest("POST", srv.URL, &buf)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, srv.URL, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
 	req.Header.Set("Connection", "upgrade")
 	req.Header.Set("Upgrade", "websocket")
 	req.Proto = "HTTP/1.1"
 	req.ProtoMajor = 1
 	req.ProtoMinor = 1
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	tr := &mocktracer.MockTracer{}
 	req, _ = TraceRequest(tr, req)
@@ -197,10 +209,11 @@ func TestWriteCloserFromRequest(t *testing.T) {
 }
 
 func TestInjectSpanContext(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                     string
-		expectContextPropagation bool
 		opts                     []ClientOption
+		expectContextPropagation bool
 	}{
 		{name: "Default", expectContextPropagation: true, opts: nil},
 		{name: "True", expectContextPropagation: true, opts: []ClientOption{InjectSpanContext(true)}},
@@ -208,7 +221,9 @@ func TestInjectSpanContext(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var handlerCalled bool
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				handlerCalled = true
@@ -235,7 +250,7 @@ func TestInjectSpanContext(t *testing.T) {
 			tr := mocktracer.New()
 			span := tr.StartSpan("root")
 
-			req, err := http.NewRequest("GET", srv.URL, nil)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -262,20 +277,25 @@ func TestInjectSpanContext(t *testing.T) {
 	}
 }
 
-func makeTags(keyVals ...interface{}) map[string]interface{} {
+func makeTags(t *testing.T, keyVals ...interface{}) map[string]interface{} {
+	t.Helper()
 	result := make(map[string]interface{}, len(keyVals)/2)
 	for i := 0; i < len(keyVals)-1; i += 2 {
-		key := keyVals[i].(string)
+		key, ok := keyVals[i].(string)
+		if !ok {
+			t.Fatalf("expected string key, got %T", keyVals[i])
+		}
 		result[key] = keyVals[i+1]
 	}
 	return result
 }
 
 func TestClientCustomURL(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {})
 	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	fn := func(u *url.URL) string {
 		// Simulate redacting token
@@ -283,41 +303,45 @@ func TestClientCustomURL(t *testing.T) {
 	}
 
 	tests := []struct {
-		opts []ClientOption
 		url  string
 		tag  string
+		opts []ClientOption
 	}{
 		// These first cases fail early
-		{[]ClientOption{}, "/ok?token=a", srv.URL + "/ok?token=a"},
-		{[]ClientOption{URLTagFunc(fn)}, "/ok?token=c", srv.URL + "/ok?token=*"},
+		{url: "/ok?token=a", tag: srv.URL + "/ok?token=a", opts: []ClientOption{}},
+		{url: "/ok?token=c", tag: srv.URL + "/ok?token=*", opts: []ClientOption{URLTagFunc(fn)}},
 		// Disable ClientTrace to fire RoundTrip
-		{[]ClientOption{ClientTrace(false)}, "/ok?token=b", srv.URL + "/ok?token=b"},
-		{[]ClientOption{ClientTrace(false), URLTagFunc(fn)}, "/ok?token=c", srv.URL + "/ok?token=*"},
+		{url: "/ok?token=b", tag: srv.URL + "/ok?token=b", opts: []ClientOption{ClientTrace(false)}},
+		{url: "/ok?token=c", tag: srv.URL + "/ok?token=*", opts: []ClientOption{ClientTrace(false), URLTagFunc(fn)}},
 	}
 
 	for _, tt := range tests {
-		var clientSpan *mocktracer.MockSpan
+		tt := tt
+		t.Run(tt.url, func(t *testing.T) {
+			t.Parallel()
+			var clientSpan *mocktracer.MockSpan
 
-		spans := makeRequest(t, srv.URL+tt.url, tt.opts...)
-		for _, span := range spans {
-			if span.OperationName == "HTTP GET" {
-				clientSpan = span
-				break
+			spans := makeRequest(t, srv.URL+tt.url, tt.opts...)
+			for _, span := range spans {
+				if span.OperationName == "HTTP GET" {
+					clientSpan = span
+					break
+				}
 			}
-		}
-		if clientSpan == nil {
-			t.Fatal("cannot find client span")
-		}
-		tag := clientSpan.Tags()["http.url"]
-		if got, want := tag, tt.tag; got != want {
-			t.Fatalf("got %s tag name, expected %s", got, want)
-		}
-		peerAddress, ok := clientSpan.Tags()["peer.address"]
-		if !ok {
-			t.Fatal("cannot find peer.address tag")
-		}
-		if peerAddress != srv.Listener.Addr().String() {
-			t.Fatalf("got %s want %s in peer.address tag", peerAddress, srv.Listener.Addr().String())
-		}
+			if clientSpan == nil {
+				t.Fatal("cannot find client span")
+			}
+			tag := clientSpan.Tags()["http.url"]
+			if got, want := tag, tt.tag; got != want {
+				t.Fatalf("got %s tag name, expected %s", got, want)
+			}
+			peerAddress, ok := clientSpan.Tags()["peer.address"]
+			if !ok {
+				t.Fatal("cannot find peer.address tag")
+			}
+			if peerAddress != srv.Listener.Addr().String() {
+				t.Fatalf("got %s want %s in peer.address tag", peerAddress, srv.Listener.Addr().String())
+			}
+		})
 	}
 }
