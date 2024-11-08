@@ -1,0 +1,45 @@
+name: Go
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        go-version: [
+          "1.21",
+          "1.22",
+          stable
+        ]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Run Unit Tests
+        run: go test -race -v ./...
+
+  draft-release:
+    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Create/Update Draft Release
+        uses: lucacome/draft-release@v1.1.1
+        with:
+          minor-label: "enhancement"
+          major-label: "change"
+          collapse-after: 20
