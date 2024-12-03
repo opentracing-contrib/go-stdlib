@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
   pull_request:
     branches:
       - master
@@ -14,8 +16,7 @@ jobs:
     strategy:
       matrix:
         go-version: [
-          "1.21",
-          "1.22",
+          oldstable,
           stable
         ]
     steps:
