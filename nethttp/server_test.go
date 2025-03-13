@@ -182,6 +182,81 @@ func TestSpanFilterOption(t *testing.T) {
 	}
 }
 
+func TestStartSpanOptionsOption(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/root", func(w http.ResponseWriter, r *http.Request) {})
+
+	const customTagForHTTPMethod = "custom_tag_for_http_method"
+
+	mwOptions := []MWOption{MWStartSpanOptions(func(r *http.Request) []opentracing.StartSpanOption {
+		return []opentracing.StartSpanOption{
+			opentracing.Tag{Key: customTagForHTTPMethod, Value: r.Method},
+		}
+	})}
+
+	tests := []struct { //nolint:govet
+		name            string
+		httpMethod      string
+		options         []MWOption
+		expectMethodTag string
+	}{
+		{
+			name:            "without options",
+			httpMethod:      http.MethodGet,
+			options:         nil,
+			expectMethodTag: "<nil>",
+		},
+		{
+			name:            "with options and method = GET",
+			httpMethod:      http.MethodGet,
+			options:         mwOptions,
+			expectMethodTag: http.MethodGet,
+		},
+		{
+			name:            "with options and method = PATCH",
+			httpMethod:      http.MethodPatch,
+			options:         mwOptions,
+			expectMethodTag: http.MethodPatch,
+		},
+	}
+
+	for _, tt := range tests {
+		testCase := tt
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			tr := &mocktracer.MockTracer{}
+			mw := Middleware(tr, mux, testCase.options...)
+			srv := httptest.NewServer(mw)
+			defer srv.Close()
+
+			req, err := http.NewRequestWithContext(context.Background(), testCase.httpMethod, srv.URL, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("server returned error: %v", err)
+			}
+			defer resp.Body.Close()
+
+			spans := tr.FinishedSpans()
+			if got, want := len(spans), 1; got != want {
+				t.Fatalf("got %d spans, expected %d", got, want)
+			}
+
+			tag, ok := spans[0].Tags()[customTagForHTTPMethod].(string)
+			if !ok {
+				tag = "<nil>"
+			}
+			if got, want := tag, testCase.expectMethodTag; got != want {
+				t.Fatalf("got %s tag name, expected %s", got, want)
+			}
+		})
+	}
+}
+
 func TestURLTagOption(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
