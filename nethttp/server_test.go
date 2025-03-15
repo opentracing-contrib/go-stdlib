@@ -40,10 +40,16 @@ func TestOperationNameOption(t *testing.T) {
 			srv := httptest.NewServer(mw)
 			defer srv.Close()
 
-			_, err := http.Get(srv.URL)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("server returned error: %v", err)
 			}
+			defer resp.Body.Close()
 
 			spans := tr.FinishedSpans()
 			if got, want := len(spans), 1; got != want {
@@ -90,10 +96,16 @@ func TestSpanObserverOption(t *testing.T) {
 			srv := httptest.NewServer(mw)
 			defer srv.Close()
 
-			_, err := http.Get(srv.URL)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("server returned error: %v", err)
 			}
+			defer resp.Body.Close()
 
 			spans := tr.FinishedSpans()
 			if got, want := len(spans), 1; got != want {
@@ -198,10 +210,16 @@ func TestURLTagOption(t *testing.T) {
 			srv := httptest.NewServer(mw)
 			defer srv.Close()
 
-			_, err := http.Get(srv.URL + testCase.url)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+testCase.url, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("server returned error: %v", err)
 			}
+			defer resp.Body.Close()
 
 			spans := tr.FinishedSpans()
 			if got, want := len(spans), 1; got != want {
@@ -353,7 +371,12 @@ func BenchmarkStatusCodeTrackingOverhead(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, err := http.Get(srv.URL)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+			if err != nil {
+				b.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				b.Fatalf("server returned error: %v", err)
 			}
@@ -380,7 +403,12 @@ func BenchmarkResponseSizeTrackingOverhead(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, err := http.Get(srv.URL)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+			if err != nil {
+				b.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				b.Fatalf("server returned error: %v", err)
 			}
@@ -441,9 +469,17 @@ func TestMiddlewareHandlerPanic(t *testing.T) {
 			srv := httptest.NewServer(MiddlewareFunc(tr, mux.ServeHTTP))
 			defer srv.Close()
 
-			_, err := http.Get(srv.URL + "/root")
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/root", nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Logf("server returned error: %v", err)
+			}
+			if resp != nil {
+				defer resp.Body.Close()
 			}
 
 			spans := tr.FinishedSpans()

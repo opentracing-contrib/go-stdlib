@@ -33,14 +33,14 @@ linters:
     - asasalint
     - asciicheck
     - bidichk
-    # - contextcheck
+    - contextcheck
+    - copyloopvar
     - dupword
     - durationcheck
     - errcheck
     - errchkjson
     - errname
     - errorlint
-    - exportloopref
     - fatcontext
     - forcetypeassert
     - gocheckcompilerdirectives
@@ -60,7 +60,7 @@ linters:
     - misspell
     - musttag
     - nilerr
-    # - noctx
+    - noctx
     - nolintlint
     - paralleltest
     - perfsprint
@@ -71,7 +71,6 @@ linters:
     - staticcheck
     - stylecheck
     - tagalign
-    - tenv
     - thelper
     - tparallel
     - typecheck
@@ -79,6 +78,7 @@ linters:
     - unparam
     - unused
     - usestdlibvars
+    - usetesting
     - wastedassign
     - whitespace
     # - wrapcheck
