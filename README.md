@@ -4,12 +4,10 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/opentracing-contrib/go-stdlib)](https://goreportcard.com/report/github.com/opentracing-contrib/go-stdlib)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/opentracing-contrib/go-stdlib)
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/opentracing-contrib/go-stdlib?logo=github&sort=semver)](https://github.com/opentracing-contrib/go-stdlib/releases/latest)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/opentracing-contrib/go-stdlib)](https://pkg.go.dev/github.com/opentracing-contrib/go-stdlib)
 
 This repository contains OpenTracing instrumentation for packages in
 the Go standard library.
-
-For documentation on the packages,
-[check godoc](https://godoc.org/github.com/opentracing-contrib/go-stdlib/).
 
 **The APIs in the various packages are experimental and may change in
 the future. You should vendor them to avoid spurious breakage.**
