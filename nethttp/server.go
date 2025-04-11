@@ -51,6 +51,7 @@ func MWSpanFilter(f func(r *http.Request) bool) MWOption {
 }
 
 // MWStartSpanOptions returns a MWOption that creates options for starting a span.
+// Middleware first applies default StartSpanOptions, followed by the ones supplied by the user.
 func MWStartSpanOptions(f func(r *http.Request) []opentracing.StartSpanOption) MWOption {
 	return func(options *mwOptions) {
 		options.startSpanOptions = f
