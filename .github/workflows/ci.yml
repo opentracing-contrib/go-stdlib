@@ -21,7 +21,7 @@ jobs:
         ]
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Golang Environment
         uses: actions/setup-go@v5
@@ -36,7 +36,7 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Create/Update Draft Release
         uses: lucacome/draft-release@v1.2.1
