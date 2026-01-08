@@ -138,13 +138,25 @@ func TestSpanFilterOption(t *testing.T) {
 	spanFilterfn := func(r *http.Request) bool {
 		return !strings.HasPrefix(r.Header.Get("User-Agent"), "kube-probe")
 	}
-	noAgentReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	noAgentReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	if err != nil {
+		t.Fatalf("failed to create noAgentReq: %v", err)
+	}
 	noAgentReq.Header.Del("User-Agent")
-	probeReq1, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	probeReq1, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	if err != nil {
+		t.Fatalf("failed to create probeReq1: %v", err)
+	}
 	probeReq1.Header.Add("User-Agent", "kube-probe/1.12")
-	probeReq2, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	probeReq2, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	if err != nil {
+		t.Fatalf("failed to create probeReq2: %v", err)
+	}
 	probeReq2.Header.Add("User-Agent", "kube-probe/9.99")
-	postmanReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	postmanReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
+	if err != nil {
+		t.Fatalf("failed to create postmanReq: %v", err)
+	}
 	postmanReq.Header.Add("User-Agent", "PostmanRuntime/7.3.0")
 	tests := []struct {
 		request            *http.Request
