@@ -138,13 +138,13 @@ func TestSpanFilterOption(t *testing.T) {
 	spanFilterfn := func(r *http.Request) bool {
 		return !strings.HasPrefix(r.Header.Get("User-Agent"), "kube-probe")
 	}
-	noAgentReq, _ := http.NewRequest(http.MethodGet, "/root", nil)
+	noAgentReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
 	noAgentReq.Header.Del("User-Agent")
-	probeReq1, _ := http.NewRequest(http.MethodGet, "/root", nil)
+	probeReq1, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
 	probeReq1.Header.Add("User-Agent", "kube-probe/1.12")
-	probeReq2, _ := http.NewRequest(http.MethodGet, "/root", nil)
+	probeReq2, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
 	probeReq2.Header.Add("User-Agent", "kube-probe/9.99")
-	postmanReq, _ := http.NewRequest(http.MethodGet, "/root", nil)
+	postmanReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/root", nil)
 	postmanReq.Header.Add("User-Agent", "PostmanRuntime/7.3.0")
 	tests := []struct {
 		request            *http.Request
