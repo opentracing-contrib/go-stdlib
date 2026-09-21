@@ -12,7 +12,7 @@ on:
 
 jobs:
   unit-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         go-version: [
@@ -32,7 +32,7 @@ jobs:
         run: go test -race -v -shuffle=on ./...
 
   draft-release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.event_name != 'pull_request'
     steps:
       - name: Checkout Repository
